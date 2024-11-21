@@ -1,6 +1,7 @@
 from iebank_api import db
 from datetime import datetime
 import string, random
+from werkzeug.security import generate_password_hash, check_password_hash
 
 class Account(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -22,3 +23,34 @@ class Account(db.Model):
         self.balance = 0.0
         self.status = "Active"
         self.country = country
+        
+class User(db.model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(150), unique=True, nullabe=False)
+    password = db.Column(db.String(128), nullable=False)
+    role = db.Column(db.String(50), default='user') # user or admin
+    
+    def __repr__(self):
+        return f'{self.username}'
+    
+    @property
+    def password(self):
+        raise AttributeError('Password field is not readable')
+    
+    @password.setter
+    def password(self, password_hash: str):
+        self.password_hash = generate_password_hash(password_hash)
+        
+    def check_password(self, password_hash: str):
+        return check_password_hash(self.password_hash, password_hash)
+    
+def create_default_admin():
+    admin_user = User.query.filter_by(username='admin').first()
+    if not admin_user:
+        admin = User(
+            username = 'admin',
+            password=generate_password_hash('password123', method='sha256'),
+            role = 'admin'
+        )
+        db.session.add(admin)
+        db.session.commit
