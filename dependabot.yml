@@ -1,0 +1,8 @@
+# Set update schedule for GitHub Actions
+version: 2
+updates:
+  - package-ecosystem: "github-actions" # Specifies the ecosystem as GitHub Actions
+    directory: "/"                      # Checks for workflow files in .github/workflows
+    schedule:
+      interval: "weekly"                # Set to check for updates weekly
+
