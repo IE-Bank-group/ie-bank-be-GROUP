@@ -1,0 +1,21 @@
+# General owners for all files
+* @Dolfynn @juandifer
+
+# Product Owner - Owns documentation and product feature descriptions
+/README.md @celinezoubii
+
+# Cloud Architect - Owns backend-related architecture and configurations
+/config.py @ptorrado2003 @apayne185
+
+# Site Reliability Engineers - Owns CI/CD workflows for backend application
+/.github/workflows/* @Nvh270704 @Thulfiqarrr
+
+# Infrastructure - Owns configuration for development and UAT environments
+/.env.development @apayne185
+/.env.uat @apayne185
+
+# Full Stack Developers - Owns requirements and Python dependencies for the backend
+/requirements.txt @Dolfynn @juandifer
+
+# Site Reliability Engineers - Owns application and deployment logic
+/app.py @Nvh270704 @Thulfiqarrr
