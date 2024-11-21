@@ -26,7 +26,8 @@ def skull():
 def create_account():
     name = request.json['name']
     currency = request.json['currency']
-    account = Account(name, currency)
+    country = request.json['country']
+    account = Account(name, currency, country)
     db.session.add(account)
     db.session.commit()
     return format_account(account)
@@ -45,6 +46,7 @@ def get_account(id):
 def update_account(id):
     account = Account.query.get(id)
     account.name = request.json['name']
+    account.country = request.json['country']
     db.session.commit()
     return format_account(account)
 
@@ -59,6 +61,7 @@ def format_account(account):
     return {
         'id': account.id,
         'name': account.name,
+        'country': account.country,
         'account_number': account.account_number,
         'balance': account.balance,
         'currency': account.currency,

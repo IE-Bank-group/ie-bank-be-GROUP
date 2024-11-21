@@ -12,10 +12,10 @@ permissions:
 
 env:
   BACKEND_WEBAPP_DEV: aguadamillas-be-dev
+  BACKEND_WEBAPP_UAT: aguadamillas-be-uat
 
 jobs:
   build:
-    
     runs-on: ubuntu-latest
     env:
       ENV: ghci
@@ -49,7 +49,7 @@ jobs:
         path: |
           . 
 
-  deploy:
+  deploy-dev:
     runs-on: ubuntu-latest
     needs: build
     environment:
@@ -74,3 +74,30 @@ jobs:
         app-name: ${{ env.BACKEND_WEBAPP_DEV }}
         package: .
     
+
+
+  deploy-uat:
+    if:  (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: [build, deploy-dev]
+    environment:
+      name: 'Development'
+      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+
+    steps:
+    - name: Download artifact from build job
+      uses: actions/download-artifact@v4
+      with:
+        name: python-app
+        path: .
+    
+    - uses: azure/login@v2
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: 'Deploy to Azure Web App'
+      uses: azure/webapps-deploy@v3
+      id: deploy-to-webapp
+      with:
+        app-name: ${{ env.BACKEND_WEBAPP_UAT }}
+        package: .
