@@ -2,6 +2,7 @@ from iebank_api import db
 from datetime import datetime
 import string, random
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import UserMixin
 
 class Account(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -24,16 +25,22 @@ class Account(db.Model):
         self.status = "Active"
         self.country = country
         
-class User(db.Model):
+class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(128), nullable=False)
-    role = db.Column(db.String(50), default='user') # user or admin
+    password_hash = db.Column(db.String(128), nullable=False)
+    admin = db.Column(db.Boolean, default=False) # user or admin
     
     def __repr__(self):
         return f'{self.username}'
     
-    @property
+    def __init__(self, username, password_hash, admin=False):
+        self.username = username
+        self.password_hash = password_hash
+        self.admin = admin
+        
+            
+    ''''@property
     def password(self):
         raise AttributeError('Password field is not readable')
     
@@ -53,4 +60,7 @@ def create_default_admin():
             role = 'admin'
         )
         db.session.add(admin)
-        db.session.commit
+        db.session.commit()
+        print("Default admin account created: username='admin', password='password123'")
+    else:
+        print("Admin account already exists.")'''

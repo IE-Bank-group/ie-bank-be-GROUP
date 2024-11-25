@@ -1,6 +1,10 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from iebank_api import db, app
-from iebank_api.models import Account
+from iebank_api.models import Account, User
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask import abort
+from flask_login import current_user, login_user
+from functools import wraps
 
 @app.route('/')
 def hello_world():
@@ -20,6 +24,27 @@ def skull():
     if db.engine.url.password:
         text = text +'<br/>Database password:' + db.engine.url.password
     return text
+
+@app.route('/login', methods=['POST'])
+def login():
+    # Get username and password from the request
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+
+    # Check if both fields are provided
+    if not username or not password:
+        return jsonify({'error': 'Missing username or password'}), 400
+
+    # Fetch user from the database
+    user = User.query.filter_by(username=username).first()
+
+    # Validate user and password
+    if user and check_password_hash(user.password_hash, password):
+        login_user(user)  # Log in the user (Flask-Login)
+        return jsonify({'message': f'Logged in as {user.username}', 'admin': user.admin}), 200
+
+    return jsonify({'error': 'Invalid username or password'}), 401
 
 
 @app.route('/accounts', methods=['POST'])
@@ -68,3 +93,103 @@ def format_account(account):
         'status': account.status,
         'created_at': account.created_at
     }
+    
+# ------ User routes ---------
+
+def admin_required(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        # Check if the user is authenticated
+        if not current_user.is_authenticated:
+            abort(401, description="Authentication required")
+
+        # Check if the user is an admin
+        if not getattr(current_user, 'admin', False):
+            abort(403, description="Admin access required")
+
+        return func(*args, **kwargs)
+    return wrapper
+
+# Get all users
+@app.route('/users', methods=['GET'])
+@admin_required
+def get_users():
+    users = User.query.all()
+    return jsonify([{
+        'id': user.id,
+        'username': user.username,
+        'admin': user.admin
+    } for user in users])
+
+# Create a new user
+@app.route('/users', methods=['POST'])
+def create_user():
+    data = request.json
+    if not data or 'username' not in data or 'password' not in data:
+        return jsonify({'error': 'Missing username or password'}), 400
+    
+    if User.query.filter_by(username=data['username']).first():
+        return jsonify({'error': 'User already exists'}), 400
+    
+    admin = data.get('admin', False)
+    hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
+    new_user = User(username=data['username'], password_hash=hashed_password, admin=False)
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({'message': 'User created successfully'}), 201
+
+# Update an existing user
+@app.route('/users/<int:user_id>', methods=['PUT'])
+def update_user(user_id):
+    user = User.query.get_or_404(user_id)
+    data = request.json
+
+    if 'username' in data:
+        user.username = data['username']
+    if 'password' in data:
+        user.password = generate_password_hash(data['password'], method='sha256')
+
+    db.session.commit()
+    return jsonify({'message': 'User updated successfully'})
+
+# Delete a user
+@app.route('/users/<int:user_id>', methods=['DELETE'])
+@admin_required
+def delete_user(user_id):
+    user = User.query.get_or_404(user_id)
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({'message': 'User deleted successfully'})
+
+def format_user(user):
+    return {
+        'id': user.id,
+        'username': user.username,
+        'password_hash': user.password_hash,
+        'admin': user.admin
+    }
+
+# Ensure admin exists with ID 1
+@app.route('/ensure_admin', methods=['POST'])
+def ensure_admin_user():
+    # Check if a user with ID 1 exists
+    admin_user = User.query.get(1)
+    
+    if admin_user:
+        if admin_user.admin:
+            return jsonify({'message': 'Admin user with ID 1 already exists'}), 200
+        else:
+            return jsonify({'error': 'User with ID 1 exists but is not an admin'}), 400
+    
+    # Create an admin user with ID 1
+    admin_user = User(
+        id=1,  # Explicitly set ID to 1
+        username='admin',
+        password_hash=generate_password_hash('adminpassword', method='sha256'),
+        admin=True
+    )
+    db.session.add(admin_user)
+    db.session.commit()
+    return jsonify({'message': 'Admin user with ID 1 created successfully'}), 201
+
