@@ -13,23 +13,26 @@ class Account(db.Model):
     status = db.Column(db.String(10), nullable=False, default="Active")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     country = db.Column(db.String(15), nullable=False, default="No Country Selected")
-
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
     def __repr__(self):
         return '<Event %r>' % self.account_number
 
-    def __init__(self, name, currency, country):
+    def __init__(self, name, account_number, currency, balance, status, country, user_id):
         self.name = name
         self.account_number = ''.join(random.choices(string.digits, k=20))
         self.currency = currency
         self.balance = 0.0
         self.status = "Active"
         self.country = country
+        self.user_id = user_id
         
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)
     admin = db.Column(db.Boolean, nullable=False, default=False) # user or admin
+    accounts = db.relationship('Account', backref='user', lazy=True)
     
     def __repr__(self):
         return f'{self.username}'

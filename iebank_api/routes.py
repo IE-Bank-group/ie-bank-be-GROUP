@@ -7,15 +7,10 @@ from flask import abort
 from flask_login import login_user, login_required, logout_user, current_user
 from functools import wraps
 from iebank_api.forms import RegisterForm, LoginForm
+import string
+import random
 
 auth = HTTPBasicAuth()
-
-@auth.verify_password
-def verify_password(username, password):
-    user = User.query.filter_by(username=username).first()
-    if user and check_password_hash(user.password_hash, password):
-      return user
-    return None  
 
 @app.route('/')
 def hello_world():
@@ -36,62 +31,68 @@ def skull():
         text = text +'<br/>Database password:' + db.engine.url.password
     return text
 
-'''@app.route('/login', methods=['POST'])
-def login():
-    # Get username and password from the request
-    data = request.json
-    username = data.get('username')
-    password = data.get('password')
-
-    # Check if both fields are provided
-    if not username or not password:
-        return jsonify({'error': 'Missing username or password'}), 400
-
-    # Fetch user from the database
-    user = User.query.filter_by(username=username).first()
-
-    # Validate user and password
-    if user and check_password_hash(user.password_hash, password):
-        login_user(user)  # Log in the user (Flask-Login)
-        return jsonify({'message': f'Logged in as {user.username}', 'admin': user.admin}), 200
-
-    return jsonify({'error': 'Invalid username or password'}), 401'''
-
-
 @app.route('/accounts', methods=['POST'])
+@auth.login_required
 def create_account():
-    name = request.json['name']
-    currency = request.json['currency']
-    country = request.json['country']
-    account = Account(name, currency, country)
-    db.session.add(account)
+    user = auth.current_user()
+    data = request.json
+    if not data or 'name' not in data or 'currency' not in data or 'country' not in  data:
+        return jsonify({'error': 'Missing account information'}), 400
+    
+    new_account = Account(
+        name=data['name'],
+        account_number=''.join(random.choices(string.digits, k=20)),
+        balance=0.0,
+        currency=data['currency'],
+        status='Active',
+        country=data['country'],
+        user_id=user.id
+    )
+    db.session.add(new_account)
     db.session.commit()
-    return format_account(account)
+    return jsonify({'message': 'Account created succesfully', 'account': format_account(new_account)}), 201
 
 @app.route('/accounts', methods=['GET'])
+@auth.login_required
 def get_accounts():
-    accounts = Account.query.all()
-    return {'accounts': [format_account(account) for account in accounts]}
+    user = auth.current_user()
+    accounts = Account.query.filter_by(user_id=user.id).all()
+    return jsonify([format_account(account) for account in accounts])
 
 @app.route('/accounts/<int:id>', methods=['GET'])
+@auth.login_required
 def get_account(id):
-    account = Account.query.get(id)
-    return format_account(account)
+    user = auth.current_user()
+    account = Account.query.filter_by(id=id, user_id=user.id).first_or_404()
+    return jsonify(format_account(account))
 
 @app.route('/accounts/<int:id>', methods=['PUT'])
+@auth.login_required
 def update_account(id):
-    account = Account.query.get(id)
-    account.name = request.json['name']
-    account.country = request.json['country']
+    user = auth.current_user()
+    account = Account.query.filter_by(id=id, user_id=user.id).first_or_404()
+    data = request.json
+
+    if 'name' in data:
+        account.name = data['name']
+    if 'currency' in data:
+        account.currency = data['currency']
+    if 'country' in data:
+        account.country = data['country']
+    if 'status' in data:
+        account.status = data['status']
+
     db.session.commit()
-    return format_account(account)
+    return jsonify({'message': 'Account updated successfully', 'account': format_account(account)})
 
 @app.route('/accounts/<int:id>', methods=['DELETE'])
+@auth.login_required
 def delete_account(id):
-    account = Account.query.get(id)
+    user = auth.current_user()
+    account = Account.query.filter_by(id=id, user_id=user.id).first_or_404()
     db.session.delete(account)
     db.session.commit()
-    return format_account(account)
+    return jsonify({'message': 'Account deleted successfully'})
 
 def format_account(account):
     return {
@@ -106,6 +107,14 @@ def format_account(account):
     }
     
 # ------ User routes ---------
+
+@auth.verify_password
+def verify_password(username, password):
+    user = User.query.filter_by(username=username).first()
+    if user and check_password_hash(user.password_hash, password):
+      return user
+    return None  
+
 
 def admin_required(func):
     @wraps(func)
@@ -150,7 +159,20 @@ def create_user():
     new_user = User(username=data['username'], password_hash=hashed_password, admin=admin)
     db.session.add(new_user)
     db.session.commit()
-
+    
+    # Create associated account for the new user
+    new_account = Account(
+        name=f"{data['username']}'s Account",
+        account_number=''.join(random.choices(string.digits, k=20)),
+        balance=0.0,
+        currency='EUR',
+        status='Active',
+        country='Spain',
+        user_id=new_user.id
+    )
+    db.session.add(new_account)
+    db.session.commit()
+    
     return jsonify({'message': 'User created successfully'}), 201
 
 # Update an existing user
