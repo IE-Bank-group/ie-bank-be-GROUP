@@ -43,27 +43,3 @@ class User(db.Model, UserMixin):
         self.admin = admin
         
             
-    ''''@property
-    def password(self):
-        raise AttributeError('Password field is not readable')
-    
-    @password.setter
-    def password(self, password_hash: str):
-        self.password_hash = generate_password_hash(password_hash)
-        
-    def check_password(self, password_hash: str):
-        return check_password_hash(self.password_hash, password_hash)
-    
-def create_default_admin():
-    admin_user = User.query.filter_by(username='admin').first()
-    if not admin_user:
-        admin = User(
-            username = 'admin',
-            password=generate_password_hash('password123', method='sha256'),
-            role = 'admin'
-        )
-        db.session.add(admin)
-        db.session.commit()
-        print("Default admin account created: username='admin', password='password123'")
-    else:
-        print("Admin account already exists.")'''
