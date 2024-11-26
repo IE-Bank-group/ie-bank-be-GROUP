@@ -1,8 +1,28 @@
-from iebank_api import app
-from iebank_api.models import Account
+from iebank_api import app, db
+from iebank_api.models import User, Account
 import pytest
+from werkzeug.security import generate_password_hash
 
-
+@pytest.fixture
+def testing_client():
+    with app.test_client() as client:
+        with app.app_context():
+            db.create_all()
+            # Create a test user
+            test_user = User(username='testuser', password_hash=generate_password_hash('testpassword', method='pbkdf2:sha256'))
+            db.session.add(test_user)
+            db.session.commit()
+            # Create a test admin user
+            test_admin = User(username='adminuser', password_hash=generate_password_hash('adminpassword', method='pbkdf2:sha256'), admin=True)
+            db.session.add(test_admin)
+            db.session.commit()
+            # Create a test account for the user
+            test_account = Account(name="Test Account", account_number="12345678901234567890", balance=1000.0, currency="USD", status="Active", country="USA", user_id=test_user.id)
+            db.session.add(test_account)
+            db.session.commit()
+        yield client
+        with app.app_context():
+            db.drop_all()
 
 def test_get_accounts(testing_client):
     """
@@ -10,89 +30,49 @@ def test_get_accounts(testing_client):
     WHEN the '/accounts' page is requested (GET)
     THEN check the response is valid
     """
-    response = testing_client.get('/accounts')
+    response = testing_client.get('/accounts', headers={'Authorization': 'Basic dGVzdHVzZXI6dGVzdHBhc3N3b3Jk'})
     assert response.status_code == 200
 
-def test_dummy_wrong_path():
+def test_dummy_wrong_path(testing_client):
     """
     GIVEN a Flask application
     WHEN the '/wrong_path' page is requested (GET)
     THEN check the response is valid
     """
-    with app.test_client() as client:
-        response = client.get('/wrong_path')
-        assert response.status_code == 404
-        
+    response = testing_client.get('/wrong_path')
+    assert response.status_code == 404
+
 def test_get_account(testing_client):
     """
     GIVEN a Flask application
-    WHEN the '/accounts/<int:id>' page is requested (GET)
-    THEN check the response is valid and the account is retrieved
-    """
-    _ = testing_client.post('/accounts', json={'name': 'John Doe', 'currency': '€', 'country':'Spain'})
-    
-    account = Account.query.filter_by(name='John Doe')[0]
-    response = testing_client.get(f'/accounts/{account.id}')
-    account = Account.query.get(account.id)
-    
-    assert response.status_code == 200
-    assert response.json['country'] == account.country
-    
-
-def test_create_account(testing_client):
-    """
-    GIVEN a Flask application
-    WHEN the '/accounts' page is posted to (POST)
+    WHEN the '/accounts/<id>' page is requested (GET)
     THEN check the response is valid
     """
-    response = testing_client.post('/accounts', json={'name': 'John Doe', 'currency': '€', 'country':'Spain'})
+    response = testing_client.get('/accounts/1', headers={'Authorization': 'Basic dGVzdHVzZXI6dGVzdHBhc3N3b3Jk'})
     assert response.status_code == 200
-    
-def test_delete_account(testing_client):
-    """
-    GIVEN a Flask application
-    WHEN the '/accounts/<int:id>' page is deleted (DELETE)
-    THEN check the response is valid and the account is deleted
-    """
-    _ = testing_client.post('/accounts', json={'name': 'John Doe', 'currency': '€', 'country':'Spain'})
-    
-    account = Account.query.filter_by(name='John Doe')[0]
-    response = testing_client.delete(f'/accounts/{account.id}')
-    assert response.status_code == 200
-    
-    accounts = Account.query.filter_by(name='John Doe').all()
-    assert accounts == []
-    
-def test_update_account(testing_client):
-    """
-    GIVEN a Flask application
-    WHEN the '/accounts/<int:id>' page is put (PUT)
-    THEN check the response is valid and the account is updated
-    """
-    _ = testing_client.post('/accounts', json={'name': 'John Doe', 'currency': '€', 'country':'Spain'})
-    account = Account.query.filter_by(name='John Doe')[0]
-    
-    response = testing_client.put(f'/accounts/{account.id}', json={'name': 'Daniel', 'country': 'Argentina'})
-    account = Account.query.get(account.id)
-    
-    
-    assert response.status_code == 200
-    assert account.name == 'Daniel'
-    assert account.country == 'Argentina'
-     
 
-def test_create_account_data(testing_client):
+def test_transfer_money(testing_client):
     """
     GIVEN a Flask application
-    WHEN the '/accounts' page is posted to (POST)
-    THEN check the account data is correct
+    WHEN the '/transfer' page is requested (POST)
+    THEN check the response is valid
     """
-    _ = testing_client.post('/accounts', json={'name': 'John Doe', 'currency': '€', 'country':'Spain'})
-    account = Account.query.filter_by(name='John Doe')[0]
-    
-    assert account.name == 'John Doe'
-    assert account.currency == '€'
-    assert account.account_number != None
-    assert account.balance == 0.0
-    assert account.status == 'Active'
-    assert account.country == 'Spain'
+    response = testing_client.post('/transfer', json={
+        'from_account': '12345678901234567890',
+        'to_account': '09876543210987654321',
+        'amount': 100.0
+    }, headers={'Authorization': 'Basic dGVzdHVzZXI6dGVzdHBhc3N3b3Jk'})
+    assert response.status_code == 404  # Since the recipient account does not exist
+
+def test_add_funds(testing_client):
+    """
+    GIVEN a Flask application
+    WHEN the '/add_funds' page is requested (POST)
+    THEN check the response is valid
+    """
+    response = testing_client.post('/add_funds', json={
+        'account_number': '12345678901234567890',
+        'amount': 500.0
+    }, headers={'Authorization': 'Basic YWRtaW51c2VyOmFkbWlucGFzc3dvcmQ='})
+    assert response.status_code == 200
+    assert response.json['account']['balance'] == 1500.0

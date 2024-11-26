@@ -298,3 +298,49 @@ def logout():
     logout_user()
     return jsonify({"message": "You have been logged out successfully.", "status": "success"}), 200
 
+# ----- Money Transfer Routes ------------
+
+@app.route('/transfer', methods=['POST'])
+@auth.login_required
+def tranfer_money():
+    user = auth.current_user()
+    data = request.json
+    if not data or 'from_account' not in data or 'to_account' not in data or 'amount' not in data:
+        return jsonify({'error': 'Missing transfer information'})
+    
+    from_account = Account.query.filter_by(account_number=data['from_account'], user_id=user>id).first()
+    to_account = Account.query.filter_by(account_number=data['to_account']).first()
+    
+    if not from_account:
+        return jsonify({'error': 'Sender account not found or not owned by user'}), 404
+    if not to_account:
+        return jsonify({'error': 'Recipient account not found'}), 404
+    if from_account.balance < data['amount']:
+        return jsonify({'error': 'Insufficient funds'}), 400
+
+    # Perform the transfer
+    from_account.balance -= data['amount']
+    to_account.balance += data['amount']
+
+    db.session.commit()
+    return jsonify({'message': 'Transfer successful'}), 200
+
+# ------ Admin Routes (funds) ----------
+
+@app.route('/add_funds', methods=['POST'])
+@auth.login_required
+@admin_required
+def add_funds():
+    data = request.json
+    if not data or 'account_number' not in data or 'amount' not in data:
+        return jsonify({'error': 'Missing account information'}), 400
+
+    account = Account.query.filter_by(account_number=data['account_number']).first()
+    if not account:
+        return jsonify({'error': 'Account not found'}), 404
+
+    # Add funds to the account
+    account.balance += data['amount']
+    db.session.commit()
+    return jsonify({'message': 'Funds added successfully', 'account': format_account(account)}), 200
+
