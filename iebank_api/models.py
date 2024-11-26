@@ -42,4 +42,3 @@ class User(db.Model, UserMixin):
         self.password_hash = password_hash
         self.admin = admin
         
-            

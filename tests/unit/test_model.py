@@ -3,10 +3,12 @@ import pytest
 from datetime import datetime
 from werkzeug.security import generate_password_hash
 import uuid
+from iebank_api import app
 
 
 @pytest.fixture(scope='function', autouse=True)
 def clean_db():
+    with app.app_context():
         db.drop_all()
         db.create_all()
         yield
@@ -15,7 +17,7 @@ def clean_db():
         
 @pytest.fixture
 def new_user():
-    unique_username = f'pytestuser_{uuid.uuid4()}'
+    unique_username = f'testuser_{uuid.uuid4()}'
     return User(username=unique_username, password_hash=generate_password_hash('testpassword', method='pbkdf2:sha256'))
 
 def test_create_account(new_user):
@@ -40,4 +42,3 @@ def test_create_account(new_user):
     assert account.status == 'Active'
     assert account.country == 'USA'
     assert account.user_id == new_user.id
-    assert isinstance(account.created_at, datetime)

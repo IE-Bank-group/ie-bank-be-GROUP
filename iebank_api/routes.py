@@ -308,7 +308,7 @@ def tranfer_money():
     if not data or 'from_account' not in data or 'to_account' not in data or 'amount' not in data:
         return jsonify({'error': 'Missing transfer information'})
     
-    from_account = Account.query.filter_by(account_number=data['from_account'], user_id=user>id).first()
+    from_account = Account.query.filter_by(account_number=data['from_account'], user_id=user.id).first()
     to_account = Account.query.filter_by(account_number=data['to_account']).first()
     
     if not from_account:

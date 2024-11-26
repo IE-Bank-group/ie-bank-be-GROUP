@@ -1,4 +1,4 @@
-from iebank_api import app, db
+from iebank_api import db, app
 from iebank_api.models import User, Account
 import pytest
 from werkzeug.security import generate_password_hash
@@ -20,7 +20,7 @@ def testing_client():
             test_account = Account(name="Test Account", account_number="12345678901234567890", balance=1000.0, currency="USD", status="Active", country="USA", user_id=test_user.id)
             db.session.add(test_account)
             db.session.commit()
-        yield client
+            yield client
         with app.app_context():
             db.drop_all()
 
