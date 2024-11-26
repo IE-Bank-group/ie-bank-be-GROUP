@@ -3,10 +3,12 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_login import LoginManager
 from flask_migrate import Migrate
+from flask_bcrypt import Bcrypt
 
 import os
 key = os.urandom(24)
 app = Flask(__name__)
+bcrypt = Bcrypt(app)
 app.config['SECRET_KEY'] = key
 
 
@@ -29,13 +31,13 @@ CORS(app)
 login_manager = LoginManager(app)
 migrate = Migrate(app, db)
 
-login_manager.login_view = 'login'
+login_manager.login_view = 'accounts.login'
 
 from iebank_api.models import User  # Import after initializing db to avoid circular imports
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))  # Fetch user from the database by ID
+    return User.query.filter(User.id == int(user_id)).first # Fetch user from the database by ID
 
 # Create database tables
 with app.app_context():

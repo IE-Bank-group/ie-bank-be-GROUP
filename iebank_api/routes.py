@@ -1,10 +1,21 @@
 from flask import Flask, request, jsonify
 from iebank_api import db, app
+from flask_httpauth import HTTPBasicAuth
 from iebank_api.models import Account, User
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import abort
-from flask_login import current_user, login_user
+from flask_login import login_user, login_required, logout_user, current_user
 from functools import wraps
+from iebank_api.forms import RegisterForm, LoginForm
+
+auth = HTTPBasicAuth()
+
+@auth.verify_password
+def verify_password(username, password):
+    user = User.query.filter_by(username=username).first()
+    if user and check_password_hash(user.password_hash, password):
+      return user
+    return None  
 
 @app.route('/')
 def hello_world():
@@ -25,7 +36,7 @@ def skull():
         text = text +'<br/>Database password:' + db.engine.url.password
     return text
 
-@app.route('/login', methods=['POST'])
+'''@app.route('/login', methods=['POST'])
 def login():
     # Get username and password from the request
     data = request.json
@@ -44,7 +55,7 @@ def login():
         login_user(user)  # Log in the user (Flask-Login)
         return jsonify({'message': f'Logged in as {user.username}', 'admin': user.admin}), 200
 
-    return jsonify({'error': 'Invalid username or password'}), 401
+    return jsonify({'error': 'Invalid username or password'}), 401'''
 
 
 @app.route('/accounts', methods=['POST'])
@@ -98,13 +109,15 @@ def format_account(account):
 
 def admin_required(func):
     @wraps(func)
+    @auth.login_required
     def wrapper(*args, **kwargs):
+        user = auth.current_user()
         # Check if the user is authenticated
-        if not current_user.is_authenticated:
+        if not user:
             abort(401, description="Authentication required")
 
         # Check if the user is an admin
-        if not getattr(current_user, 'admin', False):
+        if not getattr(user, 'admin', False):
             abort(403, description="Admin access required")
 
         return func(*args, **kwargs)
@@ -123,6 +136,7 @@ def get_users():
 
 # Create a new user
 @app.route('/users', methods=['POST'])
+@admin_required
 def create_user():
     data = request.json
     if not data or 'username' not in data or 'password' not in data:
@@ -133,7 +147,7 @@ def create_user():
     
     admin = data.get('admin', False)
     hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
-    new_user = User(username=data['username'], password_hash=hashed_password, admin=False)
+    new_user = User(username=data['username'], password_hash=hashed_password, admin=admin)
     db.session.add(new_user)
     db.session.commit()
 
@@ -192,4 +206,73 @@ def ensure_admin_user():
     db.session.add(admin_user)
     db.session.commit()
     return jsonify({'message': 'Admin user with ID 1 created successfully'}), 201
+
+# ------ Register Forms --------
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if current_user.is_authenticated:
+        return jsonify({"message": "You are already registered.", "status": "info"}), 400
+    
+    data = request.json
+    if not data:
+        return jsonify({"error": "Invalid request. Please provide JSON data."}), 400
+
+     # Use RegisterForm for validation
+    form = RegisterForm(data=data)
+    if not form.validate():
+        # Return all validation errors in the response
+        errors = {
+            field: error[0] for field, error in form.errors.items()
+        }
+        return jsonify({"message": "Validation errors occurred.", "errors": errors}), 400
+
+    # Create a new user
+    hashed_password = generate_password_hash(form.password.data)
+    user = User(username=form.username.data, password_hash=hashed_password)
+    db.session.add(user)
+    db.session.commit()
+
+    # Log the user in
+    login_user(user)
+
+    return jsonify({"message": "User registered and logged in successfully.", "status": "success", "username": user.username}), 201
+
+@app.route('/loginuser', methods=['POST'])
+def loginuser():
+    if current_user.is_authenticated:
+        return jsonify({"message": "You are already logged in.", "status": "info"}), 400
+
+    # Get JSON data from the request
+    data = request.json
+    if not data:
+        return jsonify({"error": "Invalid request. Please provide JSON data."}), 400
+
+    # Use LoginForm for validation
+    form = LoginForm(data=data)
+    if not form.validate():
+        errors = {
+            field: error[0] for field, error in form.errors.items()
+        }
+        return jsonify({"message": "Validation errors occurred.", "errors": errors}), 400
+
+    # Authenticate the user
+    user = User.query.filter_by(username=form.username.data).first()
+    if user and check_password_hash(user.password_hash, form.password.data):
+        login_user(user)
+        return jsonify({ "message": "Logged in successfully.",
+            "status": "success",
+            "username": user.username,
+            "admin": user.admin}), 200
+    else:
+        return jsonify({"error": "Invalid username or password."}), 401
+    
+@app.route("/logout", methods=["POST"])
+@login_required
+def logout():
+    if not current_user.is_authenticated:
+        return jsonify({"error": "You are not logged in."}), 400
+
+    logout_user()
+    return jsonify({"message": "You have been logged out successfully.", "status": "success"}), 200
 
