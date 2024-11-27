@@ -344,3 +344,5 @@ def add_funds():
     db.session.commit()
     return jsonify({'message': 'Funds added successfully', 'account': format_account(account)}), 200
 
+
+    
