@@ -2,9 +2,8 @@ name: ie-bank-backend
 
 on:
   push:
-    branches: [ "main", "prod" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "PROD" ]
   workflow_dispatch:
 
 permissions:
@@ -13,43 +12,48 @@ permissions:
 
 env:
   BACKEND_WEBAPP_DEV: apayne-be-dev
-  BACKEND_WEBAPP_PROD: apayne-be-prod
+  BACKEND_WEBAPP_UAT: apayne-be-uat
 
 jobs:
   build:
+  
     runs-on: ubuntu-latest
     env:
       ENV: ghci
 
     steps:
     - uses: actions/checkout@v4
-
     - name: Set up Python 3.11
       uses: actions/setup-python@v5
       with:
         python-version: "3.11"
-
     - name: Upgrade pip
-      run: python -m pip install --upgrade pip
-
+      run: |
+        python -m pip install --upgrade pip
     - name: Install dependencies
       run: |
         pip install -r requirements.txt
-
+    - name: Lint with flake8
+      run: |
+        pip install flake8 pytest
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
       run: |
         python -m pytest --cov=iebank_api -v
-
     - name: Upload artifact for deployment jobs
       uses: actions/upload-artifact@v4
       with:
         name: python-app
-        path: .
+        path: |
+          .
 
   deploy-dev:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/main'
     environment:
       name: 'Development'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
@@ -60,25 +64,24 @@ jobs:
       with:
         name: python-app
         path: .
-    
+
     - uses: azure/login@v2
       with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        creds: ${{ secrets.AZURE_CREDENTIALS_DEV }}
 
-    - name: 'Deploy to Azure Web App'
+    - name: 'Deploy to Azure Web App Development'
       uses: azure/webapps-deploy@v3
       id: deploy-to-webapp
       with:
-        app-name: ${{ env.BACKEND_WEBAPP_DEV }}
-        slot-name: production
-        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_DEV }}
+        app-name: devious-be-dev
+        package: .
 
-  deploy-prod:
+  deploy-uat:
+    if: github.event.pull_request.base.ref == 'main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/prod'
     environment:
-      name: 'Production'
+      name: 'UAT'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
 
     steps:
@@ -87,15 +90,14 @@ jobs:
       with:
         name: python-app
         path: .
-    
+
     - uses: azure/login@v2
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: 'Deploy to Azure Web App'
+    - name: 'Deploy to Azure Web App UAT'
       uses: azure/webapps-deploy@v3
       id: deploy-to-webapp
       with:
-        app-name: ${{ env.BACKEND_WEBAPP_PROD }}
-        slot-name: production
-        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_PROD }}
+        app-name: apayne-be-uat
+        package: .
