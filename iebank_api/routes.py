@@ -1,16 +1,15 @@
 from flask import Flask, request, jsonify
 from iebank_api import db, app
 from flask_httpauth import HTTPBasicAuth
-from iebank_api.models import Account, User
+from iebank_api.models import Account, User, Transaction
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import abort
 from flask_login import login_user, login_required, logout_user, current_user
 from functools import wraps
-from iebank_api.forms import RegisterForm, LoginForm
-import string
-import random
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from datetime import datetime, timedelta
+import jwt
 
-auth = HTTPBasicAuth()
 
 @app.route('/')
 def hello_world():
@@ -31,69 +30,331 @@ def skull():
         text = text +'<br/>Database password:' + db.engine.url.password
     return text
 
-@app.route('/accounts', methods=['POST'])
-@auth.login_required
-def create_account():
-    user = auth.current_user()
-    data = request.json
-    if not data or 'name' not in data or 'currency' not in data or 'country' not in  data:
-        return jsonify({'error': 'Missing account information'}), 400
-    
-    new_account = Account(
-        name=data['name'],
-        account_number=''.join(random.choices(string.digits, k=20)),
-        balance=0.0,
-        currency=data['currency'],
-        status='Active',
-        country=data['country'],
-        user_id=user.id
+@app.route('/register', methods=['POST'])
+def register():
+    # Route to register a new user
+    data = request.get_json()
+    required_fields = ['username', 'password']
+    if not data or not all(field in data for field in required_fields):
+        abort(400)
+        
+    existing_user = User.query.filter_by(username=data['username']).first()
+    if existing_user:
+        return jsonify({'error': 'User already exists'}), 400
+
+    hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
+
+    new_user = User(
+        username=data['username'],
+        password=hashed_password,
     )
-    db.session.add(new_account)
+
+    db.session.add(new_user)
     db.session.commit()
-    return jsonify({'message': 'Account created succesfully', 'account': format_account(new_account)}), 201
+
+    return format_user(new_user)
+
+
+@app.route('/login', methods=['POST'])
+def login():
+   try:
+       data = request.get_json()
+       required_fields = ['username', 'password']
+       if not data or not all(field in data for field in required_fields):
+           abort(400) 
+
+
+       user = User.query.filter_by(username=data['username']).first()
+       if not user:
+           abort(401) 
+
+
+       if check_password_hash(user.password, data['password']):
+           # Generate token
+           token = jwt.encode({
+               'user_id': user.id,
+               'exp': datetime.utcnow() + timedelta(hours=24)
+           }, app.config['SECRET_KEY'], algorithm='HS256')
+
+
+           return jsonify({
+               'message': 'Login successful',
+               'token': token,
+               'user': {
+                   'id': user.id,
+                   'username': user.username,
+                   'admin': user.admin,
+               }
+           }), 200
+       else:
+           abort(401) 
+   except Exception as e:
+       print(f"Error during login: {e}")
+       abort(500) 
+
+        
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('x-access-token')  
+        if not token:
+            return jsonify({'message': 'Token is missing!'}), 401
+
+        try:
+            # Decode the token
+            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+            current_user = User.query.filter_by(id=data['user_id']).first()
+
+            if not current_user:
+                return jsonify({'message': 'User not found!'}), 401
+
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'Token has expired!'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'message': 'Token is invalid!'}), 401
+        except Exception as e:
+            print(f"Error decoding token: {e}")
+            return jsonify({'message': 'An error occurred during token validation.'}), 401
+
+        return f(current_user, *args, **kwargs)
+
+    return decorated
+
+@app.route('/user_portal', methods=['GET'])
+@token_required
+def user_portal(current_user):
+    # Route to display the user portal with their accounts and transactions
+    accounts = Account.query.filter_by(user_id=current_user.id).all()
+    transactions = Transaction.query.join(Account, Transaction.from_account_id == Account.id).filter(Account.user_id == current_user.id).all()
+
+    return {
+        'user': format_user(current_user),
+        'accounts': [format_account(account) for account in accounts],
+        'transactions': [format_transaction(transaction) for transaction in transactions]
+    }
+    
+@app.route('/admin_portal', methods=['GET'])
+@token_required
+def admin_portal(current_user):
+    # Route to display the admin portal with all users
+    if current_user.admin != True:
+        abort(401)  
+
+    users = User.query.all()
+    return {
+        'users': [format_user(user) for user in users]
+    }
+
+@app.route('/accounts', methods=['POST'])
+@token_required
+def create_account(current_user):
+  
+    data = request.get_json()
+    required = ['name', 'currency', 'balance', 'country']
+    if not data or not all(field in data for field in required):
+        abort(400)  
+
+    name = data['name']
+    currency = data['currency']
+    balance = data['balance']
+    country = data['country']
+
+    account = Account(name=name, currency=currency, balance=balance, country=country, user_id=current_user.id)
+    db.session.add(account)
+    db.session.commit()
+    return format_account(account)
 
 @app.route('/accounts', methods=['GET'])
-@auth.login_required
-def get_accounts():
-    user = auth.current_user()
-    accounts = Account.query.filter_by(user_id=user.id).all()
-    return jsonify([format_account(account) for account in accounts])
+@token_required
+def get_accounts(current_user):
+    # Route to get all accounts for the logged-in user
+    accounts = Account.query.filter_by(user_id=current_user.id).all()
+    return {'accounts': [format_account(account) for account in accounts]}
 
 @app.route('/accounts/<int:id>', methods=['GET'])
-@auth.login_required
-def get_account(id):
-    user = auth.current_user()
-    account = Account.query.filter_by(id=id, user_id=user.id).first_or_404()
-    return jsonify(format_account(account))
+@token_required
+def get_account(current_user, id):
+    # Route to get a specific account by ID
+    account = Account.query.get(id)
+    if not account or account.user_id != current_user.id:
+        abort(500)
+    return format_account(account)
 
 @app.route('/accounts/<int:id>', methods=['PUT'])
-@auth.login_required
-def update_account(id):
-    user = auth.current_user()
-    account = Account.query.filter_by(id=id, user_id=user.id).first_or_404()
-    data = request.json
-
-    if 'name' in data:
-        account.name = data['name']
-    if 'currency' in data:
-        account.currency = data['currency']
-    if 'country' in data:
-        account.country = data['country']
-    if 'status' in data:
-        account.status = data['status']
-
+@token_required
+def update_account(current_user, id):
+    # Route to update a specific account by ID
+    account = Account.query.get(id)
+    if not account or account.user_id != current_user.id:
+        abort(500)
+    account.name = request.json['name']
     db.session.commit()
-    return jsonify({'message': 'Account updated successfully', 'account': format_account(account)})
+    return format_account(account)
 
 @app.route('/accounts/<int:id>', methods=['DELETE'])
-@auth.login_required
-def delete_account(id):
-    user = auth.current_user()
-    account = Account.query.filter_by(id=id, user_id=user.id).first_or_404()
+@token_required
+def delete_account(current_user, id):
+    # Route to delete a specific account by ID
+    account = Account.query.get(id)
+    if not account or account.user_id != current_user.id:
+        abort(500)
     db.session.delete(account)
     db.session.commit()
-    return jsonify({'message': 'Account deleted successfully'})
+    return format_account(account)
 
+@app.route('/transactions', methods=['POST'])
+@token_required
+def transfer_money(current_user):
+    data = request.get_json()
+    app.logger.info(f"Received data: {data}")
+
+    # Validate required fields
+    required_fields = ['from_account_number', 'to_account_number', 'amount']
+    if not data or not all(field in data for field in required_fields):
+        app.logger.error("Missing required fields")
+        return jsonify({'message': 'Missing required fields'}), 400
+
+    from_account_number = data['from_account_number']
+    to_account_number = data['to_account_number']
+    amount = data['amount']
+
+    # Validate that accounts exist and belong to the current user (for the source account)
+    from_account = Account.query.filter_by(account_number=from_account_number).first()
+    to_account = Account.query.filter_by(account_number=to_account_number).first()
+
+    if not from_account or from_account.user_id != current_user.id or not to_account:
+        app.logger.error("Invalid account details")
+        return jsonify({'message': 'Invalid account details'}), 400
+
+    # Validate sufficient funds
+    if from_account.balance < amount:
+        app.logger.error("Insufficient funds")
+        return jsonify({'message': 'Insufficient funds!'}), 400
+
+    # Update account balances
+    from_account.balance -= amount
+    to_account.balance += amount
+
+    # Create the transaction
+    transaction = Transaction(
+        from_account_id=from_account.id,
+        to_account_id=to_account.id,
+        amount=amount
+    )
+    db.session.add(transaction)
+    db.session.commit()
+
+    app.logger.info("Transaction successful")
+    return jsonify({
+        'transaction': {
+            'id': transaction.id,
+            'from_account_id': transaction.from_account_id,
+            'to_account_id': transaction.to_account_id,
+            'amount': transaction.amount,
+        },
+        'message': 'Transaction successful!'
+    }), 200
+
+@app.route('/transactions', methods=['GET'])
+@token_required
+def get_transactions(current_user):
+    # Route to get all transactions for the logged-in user
+    transactions = Transaction.query.join(Account, Transaction.from_account_id == Account.id).filter(Account.user_id == current_user.id).all()
+    return {'transactions': [format_transaction(transaction) for transaction in transactions]}
+
+
+@app.route('/admin/users', methods=['POST'])
+@token_required
+def create_user(current_user):
+    # Route for admin to create a new user
+    if current_user.admin != True:
+        abort(401)  # Unauthorized
+
+    data = request.get_json()
+    required_fields = ['username', 'password']
+    if not data or not all(field in data for field in required_fields):
+        abort(500)
+
+    hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
+    new_user = User(
+        username=data['username'],
+        password=hashed_password,
+        admin=data['admin'],
+    )
+
+    db.session.add(new_user)
+    db.session.commit()
+
+    return format_user(new_user)
+
+@app.route('/admin/users/<int:id>', methods=['PUT'])
+@token_required
+def update_user(current_user, id):
+    # Route for admin to update a user by ID
+    if current_user.admin != True:
+        abort(401)  # Unauthorized
+
+    user = User.query.get(id)
+    if not user:
+        abort(500)
+    user.username = request.json['username']
+    user.password = generate_password_hash(request.json['password'], method='pbkdf2:sha256')
+    user.admin = request.json['admin']
+    db.session.commit()
+    return format_user(user)
+
+@app.route('/admin/users/<int:id>', methods=['DELETE'])
+@token_required
+def delete_user(current_user, id):
+    # Route for admin to delete a user by ID
+    if current_user.admin != True:
+        abort(401)  # Unauthorized
+
+    user = User.query.get(id)
+    if not user:
+        abort(500)
+    db.session.delete(user)
+    db.session.commit()
+    return format_user(user)
+
+@app.route('/create_admin', methods=['POST'])
+@token_required
+def create_admin():
+    # Route to create an admin user
+    data = request.get_json()
+    required_fields = ['username', 'password']
+    if not data or not all(field in data for field in required_fields):
+        abort(500)
+
+    hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
+    new_user = User(
+        username=data['username'],
+        password=hashed_password,
+        admin=True,
+    )
+
+    db.session.add(new_user)
+    db.session.commit()
+
+    return format_user(new_user)
+    
+def format_transaction(transaction):
+    return {
+        'id': transaction.id,
+        'amount': transaction.amount,
+        'currency': transaction.from_account.currency,
+        'from_account': transaction.from_account.account_number,
+        'to_account': transaction.to_account.account_number
+    }
+    
+def format_user(user):
+    return {
+        'id': user.id,
+        'username': user.username,
+        'password': user.password,
+        'admin': user.admin
+    }
+    
 def format_account(account):
     return {
         'id': account.id,
@@ -103,246 +364,4 @@ def format_account(account):
         'balance': account.balance,
         'currency': account.currency,
         'status': account.status,
-        'created_at': account.created_at
     }
-    
-# ------ User routes ---------
-
-@auth.verify_password
-def verify_password(username, password):
-    user = User.query.filter_by(username=username).first()
-    if user and check_password_hash(user.password_hash, password):
-      return user
-    return None  
-
-
-def admin_required(func):
-    @wraps(func)
-    @auth.login_required
-    def wrapper(*args, **kwargs):
-        user = auth.current_user()
-        # Check if the user is authenticated
-        if not user:
-            abort(401, description="Authentication required")
-
-        # Check if the user is an admin
-        if not getattr(user, 'admin', False):
-            abort(403, description="Admin access required")
-
-        return func(*args, **kwargs)
-    return wrapper
-
-# Get all users
-@app.route('/users', methods=['GET'])
-@admin_required
-def get_users():
-    users = User.query.all()
-    return jsonify([{
-        'id': user.id,
-        'username': user.username,
-        'admin': user.admin
-    } for user in users])
-
-# Create a new user
-@app.route('/users', methods=['POST'])
-@admin_required
-def create_user():
-    data = request.json
-    if not data or 'username' not in data or 'password' not in data:
-        return jsonify({'error': 'Missing username or password'}), 400
-    
-    if User.query.filter_by(username=data['username']).first():
-        return jsonify({'error': 'User already exists'}), 400
-    
-    admin = data.get('admin', False)
-    hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
-    new_user = User(username=data['username'], password_hash=hashed_password, admin=admin)
-    db.session.add(new_user)
-    db.session.commit()
-    
-    # Create associated account for the new user
-    new_account = Account(
-        name=f"{data['username']}'s Account",
-        account_number=''.join(random.choices(string.digits, k=20)),
-        balance=0.0,
-        currency='EUR',
-        status='Active',
-        country='Spain',
-        user_id=new_user.id
-    )
-    db.session.add(new_account)
-    db.session.commit()
-    
-    return jsonify({'message': 'User created successfully'}), 201
-
-# Update an existing user
-@app.route('/users/<int:user_id>', methods=['PUT'])
-def update_user(user_id):
-    user = User.query.get_or_404(user_id)
-    data = request.json
-
-    if 'username' in data:
-        user.username = data['username']
-    if 'password' in data:
-        user.password = generate_password_hash(data['password'], method='sha256')
-
-    db.session.commit()
-    return jsonify({'message': 'User updated successfully'})
-
-# Delete a user
-@app.route('/users/<int:user_id>', methods=['DELETE'])
-@admin_required
-def delete_user(user_id):
-    user = User.query.get_or_404(user_id)
-    db.session.delete(user)
-    db.session.commit()
-    return jsonify({'message': 'User deleted successfully'})
-
-def format_user(user):
-    return {
-        'id': user.id,
-        'username': user.username,
-        'password_hash': user.password_hash,
-        'admin': user.admin
-    }
-
-# Ensure admin exists with ID 1
-@app.route('/ensure_admin', methods=['POST'])
-def ensure_admin_user():
-    # Check if a user with ID 1 exists
-    admin_user = User.query.get(1)
-    
-    if admin_user:
-        if admin_user.admin:
-            return jsonify({'message': 'Admin user with ID 1 already exists'}), 200
-        else:
-            return jsonify({'error': 'User with ID 1 exists but is not an admin'}), 400
-    
-    # Create an admin user with ID 1
-    admin_user = User(
-        id=1,  # Explicitly set ID to 1
-        username='admin',
-        password_hash=generate_password_hash('adminpassword', method='sha256'),
-        admin=True
-    )
-    db.session.add(admin_user)
-    db.session.commit()
-    return jsonify({'message': 'Admin user with ID 1 created successfully'}), 201
-
-# ------ Register Forms --------
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if current_user.is_authenticated:
-        return jsonify({"message": "You are already registered.", "status": "info"}), 400
-    
-    data = request.json
-    if not data:
-        return jsonify({"error": "Invalid request. Please provide JSON data."}), 400
-
-     # Use RegisterForm for validation
-    form = RegisterForm(data=data)
-    if not form.validate():
-        # Return all validation errors in the response
-        errors = {
-            field: error[0] for field, error in form.errors.items()
-        }
-        return jsonify({"message": "Validation errors occurred.", "errors": errors}), 400
-
-    # Create a new user
-    hashed_password = generate_password_hash(form.password.data)
-    user = User(username=form.username.data, password_hash=hashed_password)
-    db.session.add(user)
-    db.session.commit()
-
-    # Log the user in
-    login_user(user)
-
-    return jsonify({"message": "User registered and logged in successfully.", "status": "success", "username": user.username}), 201
-
-@app.route('/loginuser', methods=['POST'])
-def loginuser():
-    if current_user.is_authenticated:
-        return jsonify({"message": "You are already logged in.", "status": "info"}), 400
-
-    # Get JSON data from the request
-    data = request.json
-    if not data:
-        return jsonify({"error": "Invalid request. Please provide JSON data."}), 400
-
-    # Use LoginForm for validation
-    form = LoginForm(data=data)
-    if not form.validate():
-        errors = {
-            field: error[0] for field, error in form.errors.items()
-        }
-        return jsonify({"message": "Validation errors occurred.", "errors": errors}), 400
-
-    # Authenticate the user
-    user = User.query.filter_by(username=form.username.data).first()
-    if user and check_password_hash(user.password_hash, form.password.data):
-        login_user(user)
-        return jsonify({ "message": "Logged in successfully.",
-            "status": "success",
-            "username": user.username,
-            "admin": user.admin}), 200
-    else:
-        return jsonify({"error": "Invalid username or password."}), 401
-    
-@app.route("/logout", methods=["POST"])
-@login_required
-def logout():
-    if not current_user.is_authenticated:
-        return jsonify({"error": "You are not logged in."}), 400
-
-    logout_user()
-    return jsonify({"message": "You have been logged out successfully.", "status": "success"}), 200
-
-# ----- Money Transfer Routes ------------
-
-@app.route('/transfer', methods=['POST'])
-@auth.login_required
-def tranfer_money():
-    user = auth.current_user()
-    data = request.json
-    if not data or 'from_account' not in data or 'to_account' not in data or 'amount' not in data:
-        return jsonify({'error': 'Missing transfer information'})
-    
-    from_account = Account.query.filter_by(account_number=data['from_account'], user_id=user.id).first()
-    to_account = Account.query.filter_by(account_number=data['to_account']).first()
-    
-    if not from_account:
-        return jsonify({'error': 'Sender account not found or not owned by user'}), 404
-    if not to_account:
-        return jsonify({'error': 'Recipient account not found'}), 404
-    if from_account.balance < data['amount']:
-        return jsonify({'error': 'Insufficient funds'}), 400
-
-    # Perform the transfer
-    from_account.balance -= data['amount']
-    to_account.balance += data['amount']
-
-    db.session.commit()
-    return jsonify({'message': 'Transfer successful'}), 200
-
-# ------ Admin Routes (funds) ----------
-
-@app.route('/add_funds', methods=['POST'])
-@auth.login_required
-@admin_required
-def add_funds():
-    data = request.json
-    if not data or 'account_number' not in data or 'amount' not in data:
-        return jsonify({'error': 'Missing account information'}), 400
-
-    account = Account.query.filter_by(account_number=data['account_number']).first()
-    if not account:
-        return jsonify({'error': 'Account not found'}), 404
-
-    # Add funds to the account
-    account.balance += data['amount']
-    db.session.commit()
-    return jsonify({'message': 'Funds added successfully', 'account': format_account(account)}), 200
-
-
-    
