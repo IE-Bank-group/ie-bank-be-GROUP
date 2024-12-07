@@ -22,22 +22,21 @@ bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
 
 # Select environment based on the ENV environment variable
-env = os.getenv('ENV', 'local')
-if env == 'local':
-   print("Running in local mode")
-   app.config.from_object('config.LocalConfig')
-elif env == 'dev':
-   print("Running in development mode")
-   app.config.from_object('config.DevelopmentConfig')
-elif env == 'ghci':
-   print("Running in github mode")
-   app.config.from_object('config.GithubCIConfig')
-elif env == 'uat':
-   print("Running in UAT mode")
-   app.config.from_object('config.UATConfig')
+if os.getenv('ENV') == 'local':
+    print("Running in local mode")
+    app.config.from_object('config.LocalConfig')
+elif os.getenv('ENV') == 'dev':
+    print("Running in development mode")
+    app.config.from_object('config.DevelopmentConfig')
+elif os.getenv('ENV') == 'ghci':
+    print("Running in github mode")
+    app.config.from_object('config.GithubCIConfig')
+elif os.getenv('ENV') == 'uat':
+    print("Running in github mode")
+    app.config.from_object('config.UATConfig')
 
 # Default SQLite database configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'sqlite:///site.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'sqlite:///local.db')
 
 db = SQLAlchemy(app)
 CORS(app)
@@ -53,3 +52,4 @@ from iebank_api import routes
 
 # Debugging URL Map
 print(app.url_map)
+print(f"Database URI: {app.config['SQLALCHEMY_DATABASE_URI']}")
