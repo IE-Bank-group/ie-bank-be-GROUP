@@ -67,7 +67,7 @@ jobs:
 
     - uses: azure/login@v2
       with:
-        creds: ${{ secrets.AZURE_CREDENTIALS_DEV }}
+        creds: ${{secrets.AZURE_CREDENTIALS}}
 
     - name: 'Deploy to Azure Web App Development'
       uses: azure/webapps-deploy@v3
@@ -93,7 +93,7 @@ jobs:
 
     - uses: azure/login@v2
       with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        creds: ${{secrets.AZURE_CREDENTIALS}}
 
     - name: 'Deploy to Azure Web App UAT'
       uses: azure/webapps-deploy@v3
