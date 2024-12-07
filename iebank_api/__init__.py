@@ -4,50 +4,52 @@ from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import JWTManager
-from datetime import datetime, timedelta
-import secrets
+from datetime import timedelta
+import os
+from dotenv import load_dotenv
 import os
 
-#secret_key = secrets.token_hex(32)
-#key = os.urandom(24)
-
 app = Flask(__name__)
+load_dotenv()  
 
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
-app.permanent_session_lifetime = timedelta(days=1)  # session lifetime for tokens
+# Configure secrets
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key')
+app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'fallback-jwt-secret-key')
+app.permanent_session_lifetime = timedelta(days=1)
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 
 bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
 
-
 # Select environment based on the ENV environment variable
-if os.getenv('ENV') == 'local':
+env = os.getenv('ENV', 'local')
+if env == 'local':
    print("Running in local mode")
    app.config.from_object('config.LocalConfig')
-elif os.getenv('ENV') == 'dev':
+elif env == 'dev':
    print("Running in development mode")
    app.config.from_object('config.DevelopmentConfig')
-elif os.getenv('ENV') == 'ghci':
+elif env == 'ghci':
    print("Running in github mode")
    app.config.from_object('config.GithubCIConfig')
-elif os.getenv('ENV') == 'uat':
-   print("Running in github mode")
+elif env == 'uat':
+   print("Running in UAT mode")
    app.config.from_object('config.UATConfig')
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
+# Default SQLite database configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'sqlite:///site.db')
 
 db = SQLAlchemy(app)
 CORS(app)
 migrate = Migrate(app, db)
 
-from iebank_api.models import User  # Import after initializing db to avoid circular imports
-
 # Create database tables
 with app.app_context():
    db.create_all()
 
-# Import routes after the app is fully configured
+# Import routes and models
+from iebank_api.models import User
 from iebank_api import routes
 
-# Print URL map for debugging
+# Debugging URL Map
 print(app.url_map)

@@ -15,6 +15,11 @@ def clean_db():
 
 @pytest.fixture(scope='module')
 def testing_client():
+     # Ensure app configuration has necessary keys for testing
+    app.config['SECRET_KEY'] = 'test-secret-key'
+    app.config['JWT_SECRET_KEY'] = 'test-jwt-secret-key'
+    app.config['TESTING'] = True  # Enable Flask testing mode
+    
     with app.test_client() as client:
         with app.app_context():
             db.create_all()
