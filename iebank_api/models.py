@@ -62,4 +62,6 @@ class Transaction(db.Model):
         self.to_account_id = to_account_id
         self.currency = "€"
 
+
+
     
