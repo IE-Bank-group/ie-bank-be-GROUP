@@ -2,6 +2,7 @@ import pytest
 from iebank_api.models import Account, User, db
 from werkzeug.security import generate_password_hash
 from iebank_api import app
+from datetime import datetime
 
 @pytest.fixture(scope='function', autouse=True)
 def clean_db():
@@ -18,10 +19,17 @@ def testing_client():
         with app.app_context():
             db.create_all()
             # Create a test user
-            test_user = User(username='testuser', password_hash=generate_password_hash('testpassword', method='pbkdf2:sha256'))
+            test_user = User(username='testuser', email='testuser@example.com', password_hash=generate_password_hash('testpassword', method='pbkdf2:sha256'), date_of_birth=datetime.strptime('2000-01-01', '%Y-%m-%d'))
             db.session.add(test_user)
             db.session.commit()
+            # Create a test admin user
+            test_admin = User(username='adminuser', email='adminuser@example.com', password_hash=generate_password_hash('adminpassword', method='pbkdf2:sha256'), date_of_birth=datetime.strptime('1980-01-01', '%Y-%m-%d'), admin=True)
+            db.session.add(test_admin)
+            db.session.commit()
+            # Create a test account for the user
+            test_account = Account(name="Test Account", balance=1000.0, currency="USD", status="Active", country="USA", user_id=test_user.id)
+            db.session.add(test_account)
+            db.session.commit()
             yield client
-            db.session.remove()
+        with app.app_context():
             db.drop_all()
-

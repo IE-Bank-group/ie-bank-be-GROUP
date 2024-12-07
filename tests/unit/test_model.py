@@ -5,7 +5,6 @@ from werkzeug.security import generate_password_hash
 import uuid
 from iebank_api import app
 
-
 @pytest.fixture(scope='function', autouse=True)
 def clean_db():
     with app.app_context():
@@ -18,7 +17,7 @@ def clean_db():
 @pytest.fixture
 def new_user():
     unique_username = f'testuser_{uuid.uuid4()}'
-    return User(username=unique_username, password_hash=generate_password_hash('testpassword', method='pbkdf2:sha256'))
+    return User(username=unique_username, password_hash=generate_password_hash('testpassword', method='pbkdf2:sha256'), date_of_birth=datetime.strptime('2000-01-01', '%Y-%m-%d'))
 
 def test_create_account(new_user):
     """
@@ -28,10 +27,8 @@ def test_create_account(new_user):
     """
     account = Account(
         name='John Doe',
-        account_number='12345678901234567890',
         currency='USD',
         balance=0.0,
-        status='Active',
         country='USA',
         user_id=new_user.id
     )

@@ -4,7 +4,6 @@ from flask_httpauth import HTTPBasicAuth
 from iebank_api.models import Account, User, Transaction
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask import abort
-from flask_login import login_user, login_required, logout_user, current_user
 from functools import wraps
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from datetime import datetime, timedelta
@@ -34,19 +33,34 @@ def skull():
 def register():
     # Route to register a new user
     data = request.get_json()
-    required_fields = ['username', 'password']
+    required_fields = ['username', 'password', 'email', 'date_of_birth']
     if not data or not all(field in data for field in required_fields):
         abort(400)
         
     existing_user = User.query.filter_by(username=data['username']).first()
     if existing_user:
         return jsonify({'error': 'User already exists'}), 400
+    
+    existing_email = User.query.filter_by(email=data['email']).first()
+    if existing_email:
+        return jsonify({'error': 'Email already exists'}), 400
+    
+    try:
+        date_of_birth = datetime.strptime(data['date_of_birth'], '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'error': 'Invalid date format. Please use YYYY-MM-DD'}), 400
+    
+    # check is bro is over 18 years old
+    if (datetime.now() - date_of_birth).days < 18*365:
+        return jsonify({'error': 'You must be at least 18 years old to register'}), 400
 
     hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
 
     new_user = User(
         username=data['username'],
-        password=hashed_password,
+        email=data['email'],
+        password_hash=hashed_password,
+        date_of_birth=date_of_birth
     )
 
     db.session.add(new_user)
@@ -69,7 +83,7 @@ def login():
            abort(401) 
 
 
-       if check_password_hash(user.password, data['password']):
+       if check_password_hash(user.password_hash, data['password']):
            # Generate token
            token = jwt.encode({
                'user_id': user.id,
@@ -278,7 +292,7 @@ def create_user(current_user):
     hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
     new_user = User(
         username=data['username'],
-        password=hashed_password,
+        password_hash=hashed_password,
         admin=data['admin'],
     )
 
@@ -298,7 +312,7 @@ def update_user(current_user, id):
     if not user:
         abort(500)
     user.username = request.json['username']
-    user.password = generate_password_hash(request.json['password'], method='pbkdf2:sha256')
+    user.password_hash = generate_password_hash(request.json['password'], method='pbkdf2:sha256')
     user.admin = request.json['admin']
     db.session.commit()
     return format_user(user)
@@ -329,7 +343,7 @@ def create_admin():
     hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
     new_user = User(
         username=data['username'],
-        password=hashed_password,
+        password_hash=hashed_password,
         admin=True,
     )
 
@@ -351,7 +365,7 @@ def format_user(user):
     return {
         'id': user.id,
         'username': user.username,
-        'password': user.password,
+        'password_hash': user.password_hash,
         'admin': user.admin
     }
     

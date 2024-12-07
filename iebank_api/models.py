@@ -2,7 +2,6 @@ from iebank_api import db
 from datetime import datetime
 import string, random
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_login import UserMixin
 
 class Account(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -26,10 +25,12 @@ class Account(db.Model):
         self.country = country
         self.user_id = user_id
 
-class User(db.Model, UserMixin):
+class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(128), nullable=False)
+    email = db.Column(db.String(150), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False)
+    date_of_birth = db.Column(db.DateTime, nullable=False)
     admin = db.Column(db.Boolean, nullable=False, default=False)
     accounts = db.relationship('Account', backref='user', lazy=True)
 
@@ -45,7 +46,8 @@ class User(db.Model, UserMixin):
 
 class Transaction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    amount = db.Column(db.Float, nullable=False) # Assuming currency codes like USD, EUR, etc.
+    amount = db.Column(db.Float, nullable=False) 
+    currency = db.Column(db.String(1), nullable=False, default="€")
     from_account_id = db.Column(db.Integer, db.ForeignKey('account.id'), nullable=False)
     to_account_id = db.Column(db.Integer, db.ForeignKey('account.id'), nullable=False)
     from_account = db.relationship('Account', foreign_keys=[from_account_id], backref='outgoing_transactions')
@@ -58,5 +60,6 @@ class Transaction(db.Model):
         self.amount = amount
         self.from_account_id = from_account_id
         self.to_account_id = to_account_id
+        self.currency = "€"
 
     
