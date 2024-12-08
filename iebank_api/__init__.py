@@ -71,7 +71,7 @@ from iebank_api import routes
 print(app.url_map)
 print(f"Database URI: {app.config['SQLALCHEMY_DATABASE_URI']}")
 
-def create_admin_user():
+'''def create_admin_user():
     with app.app_context():
         # Define the admin user details
         username = 'adminuser'
@@ -106,4 +106,4 @@ def create_admin_user():
 
         print(f"Admin user '{username}' created successfully.")
 
-create_admin_user()
+create_admin_user()'''
