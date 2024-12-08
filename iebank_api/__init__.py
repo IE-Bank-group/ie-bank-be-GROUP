@@ -13,7 +13,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 load_dotenv()  
 
-CORS(app, resources={r"/*": {"origins": "http://localhost:8080"}},  supports_credentials=True)
+
 
 # Configure secrets
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key')
@@ -21,8 +21,11 @@ app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'fallback-jwt-se
 app.permanent_session_lifetime = timedelta(days=1)
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 
+
 bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
+
+CORS(app, resources={r"/*": {"origins": "http://localhost:8080"}},  supports_credentials=True)
 
 # Select environment based on the ENV environment variable
 if os.getenv('ENV') == 'local':
