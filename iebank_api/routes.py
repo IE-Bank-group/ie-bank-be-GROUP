@@ -199,7 +199,7 @@ def create_account():
     db.session.commit()
 
     # Include the account details in the response
-    return jsonify(format_account(account)), 201
+    return format_account(account), 201
 
 
 @app.route('/transactions', methods=['POST'])
