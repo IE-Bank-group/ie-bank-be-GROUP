@@ -184,7 +184,7 @@ def accounts():
 @jwt_required()
 def create_account():
     data = request.get_json()
-    required_fields = ['name', 'currency', 'balance', 'country']
+    required_fields = ['name', 'balance', 'currency', 'country']
     if not data or not all(field in data for field in required_fields):
         return jsonify({"message": "Missing required fields"}), 400
 
