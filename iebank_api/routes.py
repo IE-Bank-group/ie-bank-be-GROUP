@@ -127,7 +127,7 @@ def user_portal():
         'transactions': [format_transaction(transaction) for transaction in transactions]
     }), 200
 
-@app.route('/create_admin', methods=['POST'])
+'''@app.route('/create_admin', methods=['POST'])
 @jwt_required()
 def create_admin():
     data = request.get_json()
@@ -156,7 +156,7 @@ def create_admin():
         "username": new_admin.username,
         "email": new_admin.email,
         "admin": new_admin.admin,
-    }), 201
+    }), 201'''
 
 
 @app.route('/admin_portal', methods=['GET'])
