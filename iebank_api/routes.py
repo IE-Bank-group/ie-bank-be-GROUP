@@ -74,7 +74,7 @@ def register():
     return jsonify({'message': 'User registered successfully', 'user': format_user(new_user)}), 201
 
 
-@app.route('/login', methods=['POST'])
+@app.route('/login', methods=['POST', 'OPTIONS'])
 def login():
     if request.method == 'OPTIONS':
         response = jsonify({'message': 'CORS preflight response'})
