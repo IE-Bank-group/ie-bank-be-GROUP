@@ -38,7 +38,7 @@ def skull():
 
 
 @app.route('/register', methods=['POST'])
-#@cross_origin(supports_credentials=True, origins=["http://localhost:8080"])
+@cross_origin(supports_credentials=True, origins=["http://localhost:8080"])
 def register():
     """Register a new user"""
     data = request.get_json()
