@@ -3,7 +3,7 @@ name: ie-bank-backend
 on:
   push:
   pull_request:
-    branches: [ "main" ]
+    branches: [ "PROD" ]
   workflow_dispatch:
 
 permissions:
@@ -11,11 +11,12 @@ permissions:
   id-token: write
 
 env:
-  BACKEND_WEBAPP_DEV: aguadamillas-be-dev
-  BACKEND_WEBAPP_UAT: aguadamillas-be-uat
+  BACKEND_WEBAPP_DEV: apayne-be-dev
+  BACKEND_WEBAPP_UAT: apayne-be-uat
 
 jobs:
   build:
+  
     runs-on: ubuntu-latest
     env:
       ENV: ghci
@@ -47,9 +48,10 @@ jobs:
       with:
         name: python-app
         path: |
-          . 
+          .
 
   deploy-dev:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     needs: build
     environment:
@@ -62,26 +64,24 @@ jobs:
       with:
         name: python-app
         path: .
-    
+
     - uses: azure/login@v2
       with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        creds: ${{secrets.AZURE_CREDENTIALS}}
 
-    - name: 'Deploy to Azure Web App'
+    - name: 'Deploy to Azure Web App Development'
       uses: azure/webapps-deploy@v3
       id: deploy-to-webapp
       with:
-        app-name: ${{ env.BACKEND_WEBAPP_DEV }}
+        app-name: apayne-be-dev
         package: .
-    
-
 
   deploy-uat:
-    if:  (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || github.ref == 'refs/heads/main'
+    if: github.event.pull_request.base.ref == 'main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    needs: [build, deploy-dev]
+    needs: build
     environment:
-      name: 'Development'
+      name: 'UAT'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
 
     steps:
@@ -90,14 +90,14 @@ jobs:
       with:
         name: python-app
         path: .
-    
+
     - uses: azure/login@v2
       with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        creds: ${{secrets.AZURE_CREDENTIALS}}
 
-    - name: 'Deploy to Azure Web App'
+    - name: 'Deploy to Azure Web App UAT'
       uses: azure/webapps-deploy@v3
       id: deploy-to-webapp
       with:
-        app-name: ${{ env.BACKEND_WEBAPP_UAT }}
+        app-name: apayne-be-uat
         package: .
