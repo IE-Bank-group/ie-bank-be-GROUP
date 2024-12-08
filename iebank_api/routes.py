@@ -182,6 +182,7 @@ def accounts():
 
 @app.route('/accounts', methods=['POST'])
 @jwt_required()
+@cross_origin(origins="http://localhost:8080", supports_credentials=True)
 def create_account():
     data = request.get_json()
     required_fields = ['name', 'balance', 'currency', 'country']
