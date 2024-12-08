@@ -43,12 +43,19 @@ jobs:
     - name: Test with pytest
       run: |
         python -m pytest --cov=iebank_api -v
+    - name: Install Newman (Postman CLI Tool)
+      run: |
+        npm install -g newman
+    - name: Run Postman tests
+      run: |
+        newman run "IE Bank API Tests.postman_collection.json"
     - name: Upload artifact for deployment jobs
       uses: actions/upload-artifact@v4
       with:
         name: python-app
         path: |
           .
+      
 
   deploy-dev:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
