@@ -8,9 +8,12 @@ from datetime import timedelta
 import os
 from dotenv import load_dotenv
 import os
+from flask_cors import CORS
 
 app = Flask(__name__)
 load_dotenv()  
+
+CORS(app, supports_credentials=True)
 
 # Configure secrets
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key')

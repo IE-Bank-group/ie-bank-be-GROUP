@@ -9,6 +9,7 @@ from flask_jwt_extended import (
     get_jwt_identity
 )
 from datetime import datetime, timedelta
+from flask_cors import cross_origin
 
 # JWT Initialization
 jwt = JWTManager(app)
@@ -37,6 +38,7 @@ def skull():
 
 
 @app.route('/register', methods=['POST'])
+@cross_origin(supports_credentials=True, origins=["http://localhost:8080"])
 def register():
     """Register a new user"""
     data = request.get_json()
