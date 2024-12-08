@@ -13,42 +13,41 @@ permissions:
 env:
   BACKEND_WEBAPP_DEV: apayne-be-dev
   BACKEND_WEBAPP_UAT: apayne-be-uat
+  DEV_KV: apayne-kv-dev
+  UAT_KV: apayne-kv-uat
+  PROD_KV: apayne-kv-prod
 
 jobs:
   build:
-  
     runs-on: ubuntu-latest
     env:
       ENV: ghci
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
-    - name: Upgrade pip
-      run: |
-        python -m pip install --upgrade pip
-    - name: Install dependencies
-      run: |
-        pip install -r requirements.txt
-    - name: Lint with flake8
-      run: |
-        pip install flake8 pytest
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    - name: Test with pytest
-      run: |
-        python -m pytest --cov=iebank_api -v
-    - name: Upload artifact for deployment jobs
-      uses: actions/upload-artifact@v4
-      with:
-        name: python-app
-        path: |
-          .
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Upgrade pip
+        run: |
+          python -m pip install --upgrade pip
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      - name: Lint with flake8
+        run: |
+          pip install flake8 pytest
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      - name: Test with pytest
+        run: |
+          python -m pytest --cov=iebank_api -v
+      - name: Upload artifact for deployment jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-app
+          path: .
 
   deploy-dev:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -59,22 +58,32 @@ jobs:
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
 
     steps:
-    - name: Download artifact from build job
-      uses: actions/download-artifact@v4
-      with:
-        name: python-app
-        path: .
+      - name: Download artifact from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: python-app
+          path: .
 
-    - uses: azure/login@v2
-      with:
-        creds: ${{secrets.AZURE_CREDENTIALS}}
+      - uses: azure/login@v2
+        with:
+          creds: ${{secrets.AZURE_CREDENTIALS}}
 
-    - name: 'Deploy to Azure Web App Development'
-      uses: azure/webapps-deploy@v3
-      id: deploy-to-webapp
-      with:
-        app-name: apayne-be-dev
-        package: .
+      # Fetching secrets (username and password) from Key Vault for DEV
+      - name: Fetch secrets from Key Vault (DEV)
+        run: |
+          DEV_DB_USERNAME=$(az keyvault secret show --vault-name ${{env.DEV_KV}} --name keyVaultSecretNameAdminUsername --query value -o tsv)
+          DEV_DB_PASSWORD0=$(az keyvault secret show --vault-name ${{env.DEV_KV}} --name keyVaultSecretNameAdminPassword0 --query value -o tsv)
+          DEV_DB_PASSWORD1=$(az keyvault secret show --vault-name ${{env.DEV_KV}} --name keyVaultSecretNameAdminPassword1 --query value -o tsv)
+          echo "DEV_DB_USERNAME=${DEV_DB_USERNAME}" >> $GITHUB_ENV
+          echo "DEV_DB_PASSWORD0=${DEV_DB_PASSWORD0}" >> $GITHUB_ENV
+          echo "DEV_DB_PASSWORD1=${DEV_DB_PASSWORD1}" >> $GITHUB_ENV
+
+      - name: 'Deploy to Azure Web App Development'
+        uses: azure/webapps-deploy@v3
+        id: deploy-to-webapp
+        with:
+          app-name: apayne-be-dev
+          package: .
 
   deploy-uat:
     if: github.event.pull_request.base.ref == 'main' || github.event_name == 'workflow_dispatch'
@@ -85,19 +94,63 @@ jobs:
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
 
     steps:
-    - name: Download artifact from build job
-      uses: actions/download-artifact@v4
-      with:
-        name: python-app
-        path: .
+      - name: Download artifact from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: python-app
+          path: .
 
-    - uses: azure/login@v2
-      with:
-        creds: ${{secrets.AZURE_CREDENTIALS}}
+      - uses: azure/login@v2
+        with:
+          creds: ${{secrets.AZURE_CREDENTIALS}}
 
-    - name: 'Deploy to Azure Web App UAT'
-      uses: azure/webapps-deploy@v3
-      id: deploy-to-webapp
-      with:
-        app-name: apayne-be-uat
-        package: .
+      # Fetching secrets (username and password) from Key Vault for UAT
+      - name: Fetch secrets from Key Vault (UAT)
+        run: |
+          UAT_DB_USERNAME=$(az keyvault secret show --vault-name ${{env.UAT_KV}} --name keyVaultSecretNameAdminUsername --query value -o tsv)
+          UAT_DB_PASSWORD0=$(az keyvault secret show --vault-name ${{env.UAT_KV}} --name keyVaultSecretNameAdminPassword0 --query value -o tsv)
+          UAT_DB_PASSWORD1=$(az keyvault secret show --vault-name ${{env.UAT_KV}} --name keyVaultSecretNameAdminPassword1 --query value -o tsv)
+          echo "UAT_DB_USERNAME=${UAT_DB_USERNAME}" >> $GITHUB_ENV
+          echo "UAT_DB_PASSWORD0=${UAT_DB_PASSWORD0}" >> $GITHUB_ENV
+          echo "UAT_DB_PASSWORD1=${UAT_DB_PASSWORD1}" >> $GITHUB_ENV
+
+      - name: 'Deploy to Azure Web App UAT'
+        uses: azure/webapps-deploy@v3
+        id: deploy-to-webapp
+        with:
+          app-name: apayne-be-uat
+          package: .
+
+  deploy-prod:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    environment: Production
+
+    steps:
+      - name: Download Docker context artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: python-app
+          path: .
+
+      - uses: azure/login@v2
+        with:
+          creds: ${{secrets.AZURE_CREDENTIALS}}
+
+      # Fetching secrets (username and password) from Key Vault for PROD
+      - name: Fetch secrets from Key Vault (PROD)
+        run: |
+          PROD_DB_USERNAME=$(az keyvault secret show --vault-name ${{env.PROD_KV}} --name keyVaultSecretNameAdminUsername --query value -o tsv)
+          PROD_DB_PASSWORD0=$(az keyvault secret show --vault-name ${{env.PROD_KV}} --name keyVaultSecretNameAdminPassword0 --query value -o tsv)
+          PROD_DB_PASSWORD1=$(az keyvault secret show --vault-name ${{env.PROD_KV}} --name keyVaultSecretNameAdminPassword1 --query value -o tsv)
+          echo "PROD_DB_USERNAME=${PROD_DB_USERNAME}" >> $GITHUB_ENV
+          echo "PROD_DB_PASSWORD0=${PROD_DB_PASSWORD0}" >> $GITHUB_ENV
+          echo "PROD_DB_PASSWORD1=${PROD_DB_PASSWORD1}" >> $GITHUB_ENV
+
+      - name: Build and push Docker image to Production ACR
+        run: |
+          docker build -t ${{ secrets.PROD_ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ env.BACKEND_IMAGE_TAG }} .
+          docker login ${{ secrets.PROD_ACR_NAME }}.azurecr.io -u $PROD_DB_USERNAME -p $PROD_DB_PASSWORD0
+          docker push ${{ secrets.PROD_ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ env.BACKEND_IMAGE_TAG }}
