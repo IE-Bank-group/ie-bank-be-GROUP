@@ -38,7 +38,7 @@ def skull():
 
 
 @app.route('/register', methods=['POST'])
-@cross_origin(supports_credentials=True, origins=["http://localhost:8080"])
+'''@cross_origin(supports_credentials=True, origins=["http://localhost:8080"])'''
 def register():
     """Register a new user"""
     data = request.get_json()
@@ -76,13 +76,13 @@ def register():
 
 @app.route('/login', methods=['POST', 'OPTIONS'])
 def login():
-    if request.method == 'OPTIONS':  # Handle preflight request
+    '''if request.method == 'OPTIONS':  # Handle preflight request
         response = jsonify({'message': 'CORS preflight'})
         response.headers.add('Access-Control-Allow-Origin', 'http://localhost:8080')
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        return response, 200
+        return response, 200'''
 
     # Actual login logic
     data = request.get_json()
@@ -105,8 +105,8 @@ def login():
             'admin': user.admin
         }
     })
-    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:8080')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    '''response.headers.add('Access-Control-Allow-Origin', 'http://localhost:8080')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')'''
     return response, 200
 
 
