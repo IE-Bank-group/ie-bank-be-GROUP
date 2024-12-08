@@ -67,6 +67,23 @@ def test_login(testing_client):
     token = response.json.get('token')
     assert token is not None
 
+def test_create_admin(testing_client):
+    response = testing_client.post('/login', json={
+        'username': 'adminuser',
+        'password': 'adminpassword'
+    })
+    assert response.status_code == 200
+    token = response.json.get('token')
+    assert token is not None
+
+    response = testing_client.post('/create_admin', json={
+        'username': 'newadmin',
+        'password': 'newadminpassword',
+        'email': 'newadmin@example.com',
+        'date_of_birth': '1985-01-01'
+    }, headers={'Authorization': f'Bearer {token}'})
+    assert response.status_code == 201
+    assert response.json['username'] == 'newadmin'
 
 def test_transfer_money(testing_client):
     # Login as test user to get the token
