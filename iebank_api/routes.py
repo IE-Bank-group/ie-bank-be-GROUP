@@ -76,13 +76,15 @@ def register():
 
 @app.route('/login', methods=['POST', 'OPTIONS'])
 def login():
-    '''if request.method == 'OPTIONS':
-        response = jsonify({'message': 'CORS preflight response'})
+    if request.method == 'OPTIONS':  # Handle preflight request
+        response = jsonify({'message': 'CORS preflight'})
         response.headers.add('Access-Control-Allow-Origin', 'http://localhost:8080')
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response, 200'''
-    """Login route to authenticate users and return a JWT"""
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        return response, 200
+
+    # Actual login logic
     data = request.get_json()
     required_fields = ['username', 'password']
     if not data or not all(field in data for field in required_fields):
@@ -94,7 +96,7 @@ def login():
 
     # Generate access token
     token = create_access_token(identity=user.id, additional_claims={"admin": user.admin})
-    return jsonify({
+    response = jsonify({
         'message': 'Login successful',
         'token': token,
         'user': {
@@ -102,7 +104,11 @@ def login():
             'username': user.username,
             'admin': user.admin
         }
-    }), 200
+    })
+    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:8080')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response, 200
+
 
 
 @app.route('/user_portal', methods=['GET'])
