@@ -3,7 +3,7 @@ name: ie-bank-backend
 on:
   push:
     branches:
-      - 'trinirocaaa-patch-7'  # Trigger for this branch
+      - 'newtrykey7'  # Trigger for this branch
   pull_request:
     branches:
       - 'main'  # Trigger on pull requests to the main branch
