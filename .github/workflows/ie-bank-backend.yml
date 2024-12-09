@@ -3,11 +3,11 @@ name: ie-bank-backend
 on:
   push:
     branches:
-      - 'trinirocaaa-patch-7'  # Adjust this to the branch you want the workflow to trigger on
+      - 'trinirocaaa-patch-7'  # Trigger for this branch
   pull_request:
-    branches: 
-      - 'main' 
-  workflow_dispatch:
+    branches:
+      - 'main'  # Trigger on pull requests to the main branch
+  workflow_dispatch:  # Manual trigger
 
 permissions:
   contents: read
@@ -160,3 +160,4 @@ jobs:
         with:
           app-name: apayne-be-prod
           package: .
+
