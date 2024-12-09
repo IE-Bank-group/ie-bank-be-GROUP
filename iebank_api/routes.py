@@ -156,11 +156,70 @@ def admin_portal():
     current_user_id = get_jwt_identity()
     current_user = User.query.get(current_user_id)
 
-    if not current_user.admin:
+    # Check if the user is an admin
+    if not current_user or not current_user.admin:
         return jsonify({'error': 'Unauthorized access'}), 403
 
+    # Fetch all users
     users = User.query.all()
-    return jsonify({'users': [format_user(user) for user in users]}), 200
+
+    # Format user details for response
+    formatted_users = [format_user(user) for user in users]
+    
+    return jsonify({'users': formatted_users}), 200
+
+@app.route('/admin/users', methods=['POST'])
+@jwt_required
+def create_user():
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    # Route for admin to create a new user
+    if current_user.role != 'admin':
+        abort(401)  # Unauthorized
+
+    data = request.get_json()
+    required_fields = ['username', 'email', 'password', 'date_of_birth', 'admin']
+    if not data or not all(field in data for field in required_fields):
+        abort(500)
+
+    hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
+
+    # Convert date_of_birth to a datetime object
+    date_of_birth = datetime.strptime(data['date_of_birth'], '%Y-%m-%d')
+
+    new_user = User(
+        username=data['username'],
+        email=data['email'],
+        password=hashed_password,
+        date_of_birth=date_of_birth,
+        admin=data['admin'],
+    )
+
+    db.session.add(new_user)
+    db.session.commit()
+
+    return format_user(new_user)
+
+@app.route('/admin/users/<int:id>', methods=['PUT'])
+@jwt_required
+def update_user():
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    # Route for admin to update a user by ID
+    if current_user.role != 'admin':
+        abort(401)  # Unauthorized
+
+    user = User.query.get(id)
+    if not user:
+        abort(500)
+
+    user.username = request.json['username']
+    user.email = request.json['email']
+    if 'password' in request.json and request.json['password']:
+        user.password = generate_password_hash(request.json['password'], method='pbkdf2:sha256')
+    user.date_of_birth = datetime.strptime(request.json['date_of_birth'], '%Y-%m-%d')
+    user.admin = request.json['admin']
+    db.session.commit()
 
 @app.route('/accounts/<account_number>/', methods=['PUT'])
 @jwt_required()
