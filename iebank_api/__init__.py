@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_migrate import Migrate
@@ -11,8 +11,12 @@ from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 
+
 app = Flask(__name__)
-CORS(app, supports_credentials=True, origins=["https://thankful-glacier-08eb5bf03.4.azurestaticapps.net/"] )
+CORS(app, supports_credentials=True, origins=[
+    "http://localhost:8080",  # For local development
+    "https://thankful-glacier-08eb5bf03.4.azurestaticapps.net"  # Production frontend
+])
 load_dotenv()  
 # Configure secrets
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key')
@@ -22,10 +26,17 @@ app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 
 @app.after_request
 def add_cors_headers(response):
-    response.headers['Access-Control-Allow-Origin'] = 'https://thankful-glacier-08eb5bf03.4.azurestaticapps.net/'
-    response.headers['Access-Control-Allow-Credentials'] = 'true'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, x-access-token'
-    response.headers['Access-Control-Allow-Methods'] = 'DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT'
+    origin = request.headers.get('Origin')
+    allowed_origins = [
+        "http://localhost:8080",
+        "https://thankful-glacier-08eb5bf03.4.azurestaticapps.net"
+    ]
+    if origin in allowed_origins:
+        response = jsonify({'status': 'OK'})
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, x-access-token'
+        response.headers['Access-Control-Allow-Methods'] = 'DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT'
     return response
 
 bcrypt = Bcrypt(app)
