@@ -2,9 +2,12 @@ name: ie-bank-backend
 
 on:
   push:
+    branches:
+      - 'annachange'  # Trigger for this branch
   pull_request:
-    branches: [ "PROD" ]
-  workflow_dispatch:
+    branches:
+      - 'main'  # Trigger on pull requests to the main branch
+  workflow_dispatch:  # Manual trigger
 
 permissions:
   contents: read
@@ -13,6 +16,7 @@ permissions:
 env:
   BACKEND_WEBAPP_DEV: apayne-be-dev
   BACKEND_WEBAPP_UAT: apayne-be-uat
+  BACKEND_WEBAPP_PROD: apayne-be-prod
   DEV_KV: apayne-kv-dev
   UAT_KV: apayne-kv-uat
   PROD_KV: apayne-kv-prod
@@ -50,9 +54,9 @@ jobs:
           path: .
 
   deploy-dev:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: success()  # Only runs if the build job is successful
     runs-on: ubuntu-latest
-    needs: build
+    needs: build  # Ensures the build job runs first
     environment:
       name: 'Development'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
@@ -86,9 +90,9 @@ jobs:
           package: .
 
   deploy-uat:
-    if: github.event.pull_request.base.ref == 'main' || github.event_name == 'workflow_dispatch'
+    if: success()  # Only runs if deploy-dev is successful
     runs-on: ubuntu-latest
-    needs: build
+    needs: deploy-dev  # Ensures deploy-dev runs first
     environment:
       name: 'UAT'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
@@ -122,35 +126,61 @@ jobs:
           package: .
 
   deploy-prod:
+    if: success()  # Only runs if deploy-uat is successful
     runs-on: ubuntu-latest
-    needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    environment: Production
-
+    needs: deploy-uat  # Ensures deploy-uat runs first
+    environment:
+      name: 'Production'
+      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+  
     steps:
-      - name: Download Docker context artifact
+      # Download artifact from the build job
+      - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
           name: python-app
           path: .
-
+  
+      # Login to Azure using the service principal
       - uses: azure/login@v2
         with:
-          creds: ${{secrets.AZURE_CREDENTIALS}}
-
-      # Fetching secrets (username and password) from Key Vault for PROD
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+  
+      # Debug: Verify if the login was successful
+      - name: Azure login check
+        run: |
+          az account show
+          az keyvault list --query '[].name'
+  
+      # Fetch secrets (username and password) from Key Vault for PROD
       - name: Fetch secrets from Key Vault (PROD)
         run: |
+          echo "Fetching secrets from Key Vault..."
+          
+          # Debugging: Verify if the Key Vault is accessible
+          az keyvault show --name ${{env.PROD_KV}}
+  
+          # Fetch the secrets
           PROD_DB_USERNAME=$(az keyvault secret show --vault-name ${{env.PROD_KV}} --name keyVaultSecretNameAdminUsername --query value -o tsv)
           PROD_DB_PASSWORD0=$(az keyvault secret show --vault-name ${{env.PROD_KV}} --name keyVaultSecretNameAdminPassword0 --query value -o tsv)
           PROD_DB_PASSWORD1=$(az keyvault secret show --vault-name ${{env.PROD_KV}} --name keyVaultSecretNameAdminPassword1 --query value -o tsv)
+  
+          # Debugging: Print fetched secrets (for debugging only; avoid printing sensitive data in production)
+          echo "Fetched PROD DB username: ${PROD_DB_USERNAME}"
+          echo "Fetched PROD DB password0: ${PROD_DB_PASSWORD0}"
+  
+          # Export secrets to environment variables
           echo "PROD_DB_USERNAME=${PROD_DB_USERNAME}" >> $GITHUB_ENV
           echo "PROD_DB_PASSWORD0=${PROD_DB_PASSWORD0}" >> $GITHUB_ENV
           echo "PROD_DB_PASSWORD1=${PROD_DB_PASSWORD1}" >> $GITHUB_ENV
-
-      - name: Build and push Docker image to Production ACR
-        run: |
-          docker build -t ${{ secrets.PROD_ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ env.BACKEND_IMAGE_TAG }} .
-          docker login ${{ secrets.PROD_ACR_NAME }}.azurecr.io -u $PROD_DB_USERNAME -p $PROD_DB_PASSWORD0
-          docker push ${{ secrets.PROD_ACR_NAME }}.azurecr.io/${{ env.BACKEND_IMAGE_NAME }}:${{ env.BACKEND_IMAGE_TAG }}
+  
+      # Deploy to Azure Web App Production
+      - name: Deploy to Azure Web App Production
+        uses: azure/webapps-deploy@v3
+        id: deploy-to-webapp
+        with:
+          app-name: apayne-be-prod
+          package: .
+  
+  
+  
