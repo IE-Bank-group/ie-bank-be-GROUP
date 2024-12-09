@@ -174,8 +174,8 @@ def create_user():
     current_user_id = get_jwt_identity()
     current_user = User.query.get(current_user_id)
     # Route for admin to create a new user
-    if current_user.admin != 'admin':
-        abort(401)  # Unauthorized
+    if not current_user or not current_user.admin:
+        return jsonify({'error': 'Unauthorized access'}), 401
 
     data = request.get_json()
     required_fields = ['username', 'email', 'password', 'date_of_birth', 'admin']
