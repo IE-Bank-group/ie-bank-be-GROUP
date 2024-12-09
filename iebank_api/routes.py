@@ -221,6 +221,30 @@ def update_user(id):
     user.admin = request.json['admin']
     db.session.commit()
 
+@app.route('/admin/users/<int:id>', methods=['DELETE'])
+@jwt_required()
+def delete_user(id):
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+
+    # Check if the current user is an admin
+    if not current_user or not current_user.admin:
+        return jsonify({'error': 'Unauthorized access'}), 401
+
+    # Find the user to delete
+    user_to_delete = User.query.get(id)
+    if not user_to_delete:
+        return jsonify({'error': 'User not found'}), 404
+
+    try:
+        # Delete the user
+        db.session.delete(user_to_delete)
+        db.session.commit()
+        return jsonify({'message': f'User with ID {id} has been successfully deleted.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to delete user', 'details': str(e)}), 500
+
 
 @app.route('/accounts/<account_number>/', methods=['PUT'])
 @jwt_required()
