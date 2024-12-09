@@ -72,11 +72,8 @@ def register():
     return jsonify({'message': 'User registered successfully', 'user': format_user(new_user)}), 201
 
 
-@app.route('/login', methods=['POST', 'OPTIONS'])
+@app.route('/login', methods=['POST'])
 def login():
-    if request.method == 'OPTIONS':
-        # Respond to preflight request
-        return '', 200
     # Actual login logic
     data = request.get_json()
     required_fields = ['username', 'password']
@@ -89,6 +86,7 @@ def login():
 
     # Generate access token
     token = create_access_token(identity=user.id, additional_claims={"admin": user.admin})
+    redirect_url = '/admin_portal' if user.admin else '/user_portal'
     response = jsonify({
         'message': 'Login successful',
         'token': token,
@@ -96,8 +94,9 @@ def login():
             'id': user.id,
             'username': user.username,
             'admin': user.admin
-        }
-    })
+        },
+        'redirect_url': redirect_url
+    })        
     return response, 200
 
 
@@ -162,6 +161,51 @@ def admin_portal():
 
     users = User.query.all()
     return jsonify({'users': [format_user(user) for user in users]}), 200
+
+@app.route('/accounts/<account_number>/', methods=['PUT'])
+@jwt_required()
+def update_account(account_number):
+    current_user = get_jwt_identity()
+    
+    current_user_account = Account.query.filter_by(user_id=current_user.get("id")).first()
+    
+    if not current_user.admin or (current_user_account and current_user.get("id") == current_user_account.user_id):
+        return jsonify({"msg": "Admin access required"}), 403
+
+    try:
+        
+        account = Account.query.filter_by(account_number=account_number).first()
+        
+        if not account:
+            return jsonify({"msg": "Account not found"}), 404
+
+        account.name = request.json.get('name', account.name)
+        account.currency = request.json.get('currency', account.currency)
+        account.country = request.json.get('country', account.country)
+        account.status = request.json.get('status', account.status)
+
+        db.session.commit()
+        return jsonify({"msg": "Account updated successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": "An error occurred"}), 500
+
+@app.route('/accounts/<account_number>/', methods=['DELETE'])
+@jwt_required()
+def delete_account(account_number):
+    current_user = get_jwt_identity()
+    if not current_user.admin:
+        return jsonify({"msg": "Admin access required"}), 403
+
+    try:
+        account = Account.query.filter_by(account_number=account_number).first()
+        if not account:
+            return jsonify({"msg": "Account not found"}), 404
+
+        db.session.delete(account)
+        db.session.commit()
+        return jsonify({"msg": "Account deleted successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": "An error occurred"}), 500
 
 @app.route('/accounts', methods=['GET'])
 @jwt_required()
