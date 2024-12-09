@@ -186,13 +186,20 @@ def create_user():
 
     # Convert date_of_birth to a datetime object
     date_of_birth = datetime.strptime(data['date_of_birth'], '%Y-%m-%d')
+    
+    # Convert admin string to boolean
+    admin_input = data['admin'].strip().lower()
+    if admin_input not in ['true', 'false']:
+        return jsonify({'error': "Invalid value for 'admin'. Must be 'true' or 'false'."}), 400
+
+    admin_bool = admin_input == 'true'
 
     new_user = User(
         username=data['username'],
         email=data['email'],
         password=hashed_password,
         date_of_birth=date_of_birth,
-        admin=data['admin'],
+        admin=admin_bool
     )
 
     db.session.add(new_user)
