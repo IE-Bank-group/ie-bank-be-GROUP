@@ -16,6 +16,7 @@ permissions:
 env:
   BACKEND_WEBAPP_DEV: apayne-be-dev
   BACKEND_WEBAPP_UAT: apayne-be-uat
+  BACKEND_WEBAPP_PROD: apayne-be-prod
   DEV_KV: apayne-kv-dev
   UAT_KV: apayne-kv-uat
   PROD_KV: apayne-kv-prod
@@ -53,9 +54,9 @@ jobs:
           path: .
 
   deploy-dev:
-    if: github.ref == 'refs/heads/trinirocaaa-patch-7' || github.event_name == 'workflow_dispatch'
+    if: success()  # Only runs if the build job is successful
     runs-on: ubuntu-latest
-    needs: build
+    needs: build  # Ensures the build job runs first
     environment:
       name: 'Development'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
@@ -89,9 +90,9 @@ jobs:
           package: .
 
   deploy-uat:
-    if: github.ref == 'refs/heads/trinirocaaa-patch-7' || github.event_name == 'workflow_dispatch'
+    if: success()  # Only runs if deploy-dev is successful
     runs-on: ubuntu-latest
-    needs: [deploy-dev]  # Ensure this job only runs after deploy-dev has been successful
+    needs: deploy-dev  # Ensures deploy-dev runs first
     environment:
       name: 'UAT'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
@@ -125,9 +126,9 @@ jobs:
           package: .
 
   deploy-prod:
-    if: github.ref == 'refs/heads/trinirocaaa-patch-7' || github.event_name == 'workflow_dispatch'
+    if: success()  # Only runs if deploy-uat is successful
     runs-on: ubuntu-latest
-    needs: [deploy-dev]  # Ensure this job only runs after deploy-dev has been successful
+    needs: deploy-uat  # Ensures deploy-uat runs first
     environment:
       name: 'Production'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
