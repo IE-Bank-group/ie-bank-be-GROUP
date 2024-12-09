@@ -91,7 +91,7 @@ jobs:
   deploy-uat:
     if: github.ref == 'refs/heads/trinirocaaa-patch-7' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    needs: build
+    needs: [deploy-dev]  # Ensure this job only runs after deploy-dev has been successful
     environment:
       name: 'UAT'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
@@ -127,7 +127,7 @@ jobs:
   deploy-prod:
     if: github.ref == 'refs/heads/trinirocaaa-patch-7' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    needs: build
+    needs: [deploy-dev]  # Ensure this job only runs after deploy-dev has been successful
     environment:
       name: 'Production'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
@@ -159,4 +159,3 @@ jobs:
         with:
           app-name: apayne-be-prod
           package: .
-
