@@ -174,21 +174,44 @@ def create_user():
 def update_user(id):
     current_user_id = get_jwt_identity()
     current_user = User.query.get(current_user_id)
-    # Route for admin to update a user by ID
+
+    # Check if the current user is an admin
     if not current_user or not current_user.admin:
         return jsonify({'error': 'Unauthorized access'}), 401
 
+    # Find the user to update
     user = User.query.get(id)
     if not user:
-        abort(500)
+        return jsonify({'error': 'User not found'}), 404
 
-    user.username = request.json['username']
-    user.email = request.json['email']
-    if 'password' in request.json and request.json['password']:
-        user.password = generate_password_hash(request.json['password'], method='pbkdf2:sha256')
-    user.date_of_birth = datetime.strptime(request.json['date_of_birth'], '%Y-%m-%d')
-    user.admin = request.json['admin']
-    db.session.commit()
+    try:
+        # Update only the fields provided in the request
+        data = request.get_json()
+
+        if 'username' in data:
+            user.username = data['username']
+        if 'email' in data:
+            user.email = data['email']
+        if 'password' in data and data['password']:
+            user.password_hash = generate_password_hash(data['password'], method='pbkdf2:sha256')
+        if 'date_of_birth' in data:
+            user.date_of_birth = datetime.strptime(data['date_of_birth'], '%Y-%m-%d')
+        if 'admin' in data:
+            admin_input = data['admin'].strip().lower()
+            if admin_input not in ['admin', 'user']:
+                return jsonify({'error': "Invalid value for 'admin'. Must be 'admin' or 'user'."}), 400
+            user.admin = admin_input == 'admin'
+
+        db.session.commit()
+
+        return jsonify({
+            'message': 'User updated successfully',
+            'user': format_user(user)
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to update user', 'details': str(e)}), 500
+
 
 @app.route('/admin/users/<int:id>', methods=['DELETE'])
 @jwt_required()
