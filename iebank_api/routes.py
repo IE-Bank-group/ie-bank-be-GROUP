@@ -9,7 +9,6 @@ from flask_jwt_extended import (
     get_jwt_identity
 )
 from datetime import datetime, timedelta
-from flask_cors import cross_origin
 
 # JWT Initialization
 jwt = JWTManager(app)
@@ -38,7 +37,6 @@ def skull():
 
 
 @app.route('/register', methods=['POST'])
-@cross_origin(supports_credentials=True, origins=["http://localhost:8080"])
 def register():
     """Register a new user"""
     data = request.get_json()
@@ -74,16 +72,8 @@ def register():
     return jsonify({'message': 'User registered successfully', 'user': format_user(new_user)}), 201
 
 
-@app.route('/login', methods=['POST', 'OPTIONS'])
+@app.route('/login', methods=['POST'])
 def login():
-    if request.method == 'OPTIONS':  # Handle preflight request
-        response = jsonify({'message': 'CORS preflight'})
-        response.headers.add('Access-Control-Allow-Origin', 'http://localhost:8080')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        return response, 200
-
     # Actual login logic
     data = request.get_json()
     required_fields = ['username', 'password']
@@ -96,6 +86,7 @@ def login():
 
     # Generate access token
     token = create_access_token(identity=user.id, additional_claims={"admin": user.admin})
+    redirect_url = '/admin_portal' if user.admin else '/user_portal'
     response = jsonify({
         'message': 'Login successful',
         'token': token,
@@ -103,10 +94,9 @@ def login():
             'id': user.id,
             'username': user.username,
             'admin': user.admin
-        }
-    })
-    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:8080')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
+        },
+        'redirect_url': redirect_url
+    })        
     return response, 200
 
 
@@ -127,37 +117,6 @@ def user_portal():
         'transactions': [format_transaction(transaction) for transaction in transactions]
     }), 200
 
-@app.route('/create_admin', methods=['POST'])
-@jwt_required()
-def create_admin():
-    data = request.get_json()
-    required_fields = ['username', 'password', 'email', 'date_of_birth']
-    if not data or not all(field in data for field in required_fields):
-        return jsonify({"message": "Missing required fields"}), 400
-
-    hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
-    try:
-        date_of_birth = datetime.strptime(data['date_of_birth'], '%Y-%m-%d')
-    except ValueError:
-        return jsonify({"message": "Invalid date format. Use YYYY-MM-DD"}), 400
-
-    new_admin = User(
-        username=data['username'],
-        email=data['email'],
-        password_hash=hashed_password,
-        date_of_birth=date_of_birth,
-        admin=True,
-    )
-    db.session.add(new_admin)
-    db.session.commit()
-
-    return jsonify({
-        "id": new_admin.id,
-        "username": new_admin.username,
-        "email": new_admin.email,
-        "admin": new_admin.admin,
-    }), 201
-
 
 @app.route('/admin_portal', methods=['GET'])
 @jwt_required()
@@ -166,11 +125,118 @@ def admin_portal():
     current_user_id = get_jwt_identity()
     current_user = User.query.get(current_user_id)
 
-    if not current_user.admin:
+    # Check if the user is an admin
+    if not current_user or not current_user.admin:
         return jsonify({'error': 'Unauthorized access'}), 403
 
+    # Fetch all users
     users = User.query.all()
-    return jsonify({'users': [format_user(user) for user in users]}), 200
+
+    # Format user details for response
+    formatted_users = [format_user(user) for user in users]
+    
+    return jsonify({'users': formatted_users}), 200
+
+@app.route('/admin/users', methods=['POST'])
+@jwt_required()
+def create_user():
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    # Route for admin to create a new user
+    if not current_user or not current_user.admin:
+        return jsonify({'error': 'Unauthorized access'}), 401
+
+    data = request.get_json()
+    required_fields = ['username', 'email', 'password', 'date_of_birth', 'admin']
+    if not data or not all(field in data for field in required_fields):
+        abort(500)
+
+    hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
+
+    # Convert date_of_birth to a datetime object
+    date_of_birth = datetime.strptime(data['date_of_birth'], '%Y-%m-%d')
+
+    new_user = User(
+        username=data['username'],
+        email=data['email'],
+        password_hash=hashed_password,
+        date_of_birth=date_of_birth,
+        admin=data['admin']
+    )
+
+    db.session.add(new_user)
+    db.session.commit()
+
+    return format_user(new_user)
+
+@app.route('/admin/users/<int:id>', methods=['PUT'])
+@jwt_required()
+def update_user(id):
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+
+    # Check if the current user is an admin
+    if not current_user or not current_user.admin:
+        return jsonify({'error': 'Unauthorized access'}), 401
+
+    # Find the user to update
+    user = User.query.get(id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    try:
+        # Update only the fields provided in the request
+        data = request.get_json()
+
+        if 'username' in data:
+            user.username = data['username']
+        if 'email' in data:
+            user.email = data['email']
+        if 'password' in data and data['password']:
+            user.password_hash = generate_password_hash(data['password'], method='pbkdf2:sha256')
+        if 'date_of_birth' in data:
+            user.date_of_birth = datetime.strptime(data['date_of_birth'], '%Y-%m-%d')
+        if 'admin' in data:
+            admin_input = data['admin'].strip().lower()
+            if admin_input not in ['admin', 'user']:
+                return jsonify({'error': "Invalid value for 'admin'. Must be 'admin' or 'user'."}), 400
+            user.admin = admin_input == 'admin'
+
+        db.session.commit()
+
+        return jsonify({
+            'message': 'User updated successfully',
+            'user': format_user(user)
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to update user', 'details': str(e)}), 500
+
+
+@app.route('/admin/users/<int:id>', methods=['DELETE'])
+@jwt_required()
+def delete_user(id):
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+
+    # Check if the current user is an admin
+    if not current_user or not current_user.admin:
+        return jsonify({'error': 'Unauthorized access'}), 401
+
+    # Find the user to delete
+    user_to_delete = User.query.get(id)
+    if not user_to_delete:
+        return jsonify({'error': 'User not found'}), 404
+
+    try:
+        # Delete the user
+        db.session.delete(user_to_delete)
+        db.session.commit()
+        return jsonify({'message': f'User with ID {id} has been successfully deleted.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to delete user', 'details': str(e)}), 500
+
 
 @app.route('/accounts', methods=['GET'])
 @jwt_required()
@@ -182,7 +248,6 @@ def accounts():
 
 @app.route('/accounts', methods=['POST'])
 @jwt_required()
-@cross_origin(origins="http://localhost:8080", supports_credentials=True)
 def create_account():
     data = request.get_json()
     required_fields = ['name', 'balance', 'currency', 'country']
