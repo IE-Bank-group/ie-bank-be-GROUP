@@ -7,13 +7,12 @@ from flask_jwt_extended import JWTManager
 from datetime import timedelta
 import os
 from dotenv import load_dotenv
-import os
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 
 app = Flask(__name__)
-CORS(app, supports_credentials=True)
+CORS(app, supports_credentials=True, origins=["http://localhost:8080"] )
 load_dotenv()  
 # Configure secrets
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'fallback-secret-key')
@@ -21,22 +20,16 @@ app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'fallback-jwt-se
 app.permanent_session_lifetime = timedelta(days=1)
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = 'http://localhost:8080'
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, x-access-token'
+    response.headers['Access-Control-Allow-Methods'] = 'DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT'
+    return response
 
 bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
-
-
-'''if os.getenv('ENV') == 'production':
-    CORS(app, supports_credentials=True, resources={r"/*": {"origins": "http://localhost:8080"}})
-else:
-    CORS(app, supports_credentials=True, resources={
-        r"/*": {
-            "origins": "http://localhost:8080",
-            "allow_headers": ["Content-Type", "Authorization", "x-access-token"],
-            "expose_headers": ["Access-Control-Allow-Origin"],
-            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-        }
-    })'''
     
 # Select environment based on the ENV environment variable
 if os.getenv('ENV') == 'local':
@@ -51,12 +44,12 @@ elif os.getenv('ENV') == 'ghci':
 elif os.getenv('ENV') == 'uat':
     print("Running in github mode")
     app.config.from_object('config.UATConfig')
-
+elif os.getenv('ENV') == 'prod':
+    app.config.from_object('config.ProductionConfig')   
 # Default SQLite database configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'sqlite:///local.db')
 
 db = SQLAlchemy(app)
-CORS(app)
 migrate = Migrate(app, db)
 
 # Create database tables
@@ -109,3 +102,5 @@ def create_admin_user():
 with app.app_context():
     db.create_all()
     create_admin_user()
+
+from iebank_api import routes

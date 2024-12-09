@@ -9,7 +9,6 @@ from flask_jwt_extended import (
     get_jwt_identity
 )
 from datetime import datetime, timedelta
-from flask_cors import cross_origin
 
 # JWT Initialization
 jwt = JWTManager(app)
@@ -75,14 +74,9 @@ def register():
 
 @app.route('/login', methods=['POST', 'OPTIONS'])
 def login():
-    '''if request.method == 'OPTIONS':  # Handle preflight request
-        response = jsonify({'message': 'CORS preflight'})
-        response.headers.add('Access-Control-Allow-Origin', 'http://localhost:8080')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        return response, 200'''
-
+    if request.method == 'OPTIONS':
+        # Respond to preflight request
+        return '', 200
     # Actual login logic
     data = request.get_json()
     required_fields = ['username', 'password']
@@ -104,8 +98,6 @@ def login():
             'admin': user.admin
         }
     })
-    '''response.headers.add('Access-Control-Allow-Origin', 'http://localhost:8080')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')'''
     return response, 200
 
 
@@ -181,7 +173,6 @@ def accounts():
 
 @app.route('/accounts', methods=['POST'])
 @jwt_required()
-@cross_origin(origins="http://localhost:8080", supports_credentials=True)
 def create_account():
     data = request.get_json()
     required_fields = ['name', 'balance', 'currency', 'country']
