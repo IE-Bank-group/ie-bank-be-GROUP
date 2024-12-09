@@ -117,37 +117,6 @@ def user_portal():
         'transactions': [format_transaction(transaction) for transaction in transactions]
     }), 200
 
-'''@app.route('/create_admin', methods=['POST'])
-@jwt_required()
-def create_admin():
-    data = request.get_json()
-    required_fields = ['username', 'password', 'email', 'date_of_birth']
-    if not data or not all(field in data for field in required_fields):
-        return jsonify({"message": "Missing required fields"}), 400
-
-    hashed_password = generate_password_hash(data['password'], method='pbkdf2:sha256')
-    try:
-        date_of_birth = datetime.strptime(data['date_of_birth'], '%Y-%m-%d')
-    except ValueError:
-        return jsonify({"message": "Invalid date format. Use YYYY-MM-DD"}), 400
-
-    new_admin = User(
-        username=data['username'],
-        email=data['email'],
-        password_hash=hashed_password,
-        date_of_birth=date_of_birth,
-        admin=True,
-    )
-    db.session.add(new_admin)
-    db.session.commit()
-
-    return jsonify({
-        "id": new_admin.id,
-        "username": new_admin.username,
-        "email": new_admin.email,
-        "admin": new_admin.admin,
-    }), 201'''
-
 
 @app.route('/admin_portal', methods=['GET'])
 @jwt_required()
@@ -245,51 +214,6 @@ def delete_user(id):
         db.session.rollback()
         return jsonify({'error': 'Failed to delete user', 'details': str(e)}), 500
 
-
-@app.route('/accounts/<account_number>/', methods=['PUT'])
-@jwt_required()
-def update_account(account_number):
-    current_user = get_jwt_identity()
-    
-    current_user_account = Account.query.filter_by(user_id=current_user.get("id")).first()
-    
-    if not current_user.admin or (current_user_account and current_user.get("id") == current_user_account.user_id):
-        return jsonify({"msg": "Admin access required"}), 403
-
-    try:
-        
-        account = Account.query.filter_by(account_number=account_number).first()
-        
-        if not account:
-            return jsonify({"msg": "Account not found"}), 404
-
-        account.name = request.json.get('name', account.name)
-        account.currency = request.json.get('currency', account.currency)
-        account.country = request.json.get('country', account.country)
-        account.status = request.json.get('status', account.status)
-
-        db.session.commit()
-        return jsonify({"msg": "Account updated successfully"}), 200
-    except Exception as e:
-        return jsonify({"error": "An error occurred"}), 500
-
-@app.route('/accounts/<account_number>/', methods=['DELETE'])
-@jwt_required()
-def delete_account(account_number):
-    current_user = get_jwt_identity()
-    if not current_user.admin:
-        return jsonify({"msg": "Admin access required"}), 403
-
-    try:
-        account = Account.query.filter_by(account_number=account_number).first()
-        if not account:
-            return jsonify({"msg": "Account not found"}), 404
-
-        db.session.delete(account)
-        db.session.commit()
-        return jsonify({"msg": "Account deleted successfully"}), 200
-    except Exception as e:
-        return jsonify({"error": "An error occurred"}), 500
 
 @app.route('/accounts', methods=['GET'])
 @jwt_required()
