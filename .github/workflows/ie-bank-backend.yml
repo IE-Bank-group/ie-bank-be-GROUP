@@ -125,62 +125,62 @@ jobs:
           app-name: apayne-be-uat
           package: .
 
-deploy-prod:
-  if: success()  # Only runs if deploy-uat is successful
-  runs-on: ubuntu-latest
-  needs: deploy-uat  # Ensures deploy-uat runs first
-  environment:
-    name: 'Production'
-    url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
-
-  steps:
-    # Download artifact from the build job
-    - name: Download artifact from build job
-      uses: actions/download-artifact@v4
-      with:
-        name: python-app
-        path: .
-
-    # Login to Azure using the service principal
-    - uses: azure/login@v2
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-    # Debug: Verify if the login was successful
-    - name: Azure login check
-      run: |
-        az account show
-        az keyvault list --query '[].name'
-
-    # Fetch secrets (username and password) from Key Vault for PROD
-    - name: Fetch secrets from Key Vault (PROD)
-      run: |
-        echo "Fetching secrets from Key Vault..."
-        
-        # Debugging: Verify if the Key Vault is accessible
-        az keyvault show --name ${{env.PROD_KV}}
-
-        # Fetch the secrets
-        PROD_DB_USERNAME=$(az keyvault secret show --vault-name ${{env.PROD_KV}} --name keyVaultSecretNameAdminUsername --query value -o tsv)
-        PROD_DB_PASSWORD0=$(az keyvault secret show --vault-name ${{env.PROD_KV}} --name keyVaultSecretNameAdminPassword0 --query value -o tsv)
-        PROD_DB_PASSWORD1=$(az keyvault secret show --vault-name ${{env.PROD_KV}} --name keyVaultSecretNameAdminPassword1 --query value -o tsv)
-
-        # Debugging: Print fetched secrets (for debugging only; avoid printing sensitive data in production)
-        echo "Fetched PROD DB username: ${PROD_DB_USERNAME}"
-        echo "Fetched PROD DB password0: ${PROD_DB_PASSWORD0}"
-
-        # Export secrets to environment variables
-        echo "PROD_DB_USERNAME=${PROD_DB_USERNAME}" >> $GITHUB_ENV
-        echo "PROD_DB_PASSWORD0=${PROD_DB_PASSWORD0}" >> $GITHUB_ENV
-        echo "PROD_DB_PASSWORD1=${PROD_DB_PASSWORD1}" >> $GITHUB_ENV
-
-    # Deploy to Azure Web App Production
-    - name: Deploy to Azure Web App Production
-      uses: azure/webapps-deploy@v3
-      id: deploy-to-webapp
-      with:
-        app-name: apayne-be-prod
-        package: .
-
-
-
+  deploy-prod:
+    if: success()  # Only runs if deploy-uat is successful
+    runs-on: ubuntu-latest
+    needs: deploy-uat  # Ensures deploy-uat runs first
+    environment:
+      name: 'Production'
+      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+  
+    steps:
+      # Download artifact from the build job
+      - name: Download artifact from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: python-app
+          path: .
+  
+      # Login to Azure using the service principal
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+  
+      # Debug: Verify if the login was successful
+      - name: Azure login check
+        run: |
+          az account show
+          az keyvault list --query '[].name'
+  
+      # Fetch secrets (username and password) from Key Vault for PROD
+      - name: Fetch secrets from Key Vault (PROD)
+        run: |
+          echo "Fetching secrets from Key Vault..."
+          
+          # Debugging: Verify if the Key Vault is accessible
+          az keyvault show --name ${{env.PROD_KV}}
+  
+          # Fetch the secrets
+          PROD_DB_USERNAME=$(az keyvault secret show --vault-name ${{env.PROD_KV}} --name keyVaultSecretNameAdminUsername --query value -o tsv)
+          PROD_DB_PASSWORD0=$(az keyvault secret show --vault-name ${{env.PROD_KV}} --name keyVaultSecretNameAdminPassword0 --query value -o tsv)
+          PROD_DB_PASSWORD1=$(az keyvault secret show --vault-name ${{env.PROD_KV}} --name keyVaultSecretNameAdminPassword1 --query value -o tsv)
+  
+          # Debugging: Print fetched secrets (for debugging only; avoid printing sensitive data in production)
+          echo "Fetched PROD DB username: ${PROD_DB_USERNAME}"
+          echo "Fetched PROD DB password0: ${PROD_DB_PASSWORD0}"
+  
+          # Export secrets to environment variables
+          echo "PROD_DB_USERNAME=${PROD_DB_USERNAME}" >> $GITHUB_ENV
+          echo "PROD_DB_PASSWORD0=${PROD_DB_PASSWORD0}" >> $GITHUB_ENV
+          echo "PROD_DB_PASSWORD1=${PROD_DB_PASSWORD1}" >> $GITHUB_ENV
+  
+      # Deploy to Azure Web App Production
+      - name: Deploy to Azure Web App Production
+        uses: azure/webapps-deploy@v3
+        id: deploy-to-webapp
+        with:
+          app-name: apayne-be-prod
+          package: .
+  
+  
+  
