@@ -212,21 +212,52 @@ def create_user():
 def update_user(id):
     current_user_id = get_jwt_identity()
     current_user = User.query.get(current_user_id)
-    # Route for admin to update a user by ID
-    if current_user.admin != 'admin':
-        abort(401)  # Unauthorized
 
+    # Check if the current user is an admin
+    if not current_user or not current_user.admin:
+        return jsonify({'error': 'Unauthorized access'}), 401
+
+    # Fetch the user to be updated
     user = User.query.get(id)
     if not user:
-        abort(500)
+        return jsonify({'error': 'User not found'}), 404
 
-    user.username = request.json['username']
-    user.email = request.json['email']
-    if 'password' in request.json and request.json['password']:
-        user.password = generate_password_hash(request.json['password'], method='pbkdf2:sha256')
-    user.date_of_birth = datetime.strptime(request.json['date_of_birth'], '%Y-%m-%d')
-    user.admin = request.json['admin']
-    db.session.commit()
+    # Parse and validate the request data
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid or missing data'}), 400
+
+    # Update fields if they exist in the request
+    if 'username' in data:
+        user.username = data['username']
+
+    if 'email' in data:
+        user.email = data['email']
+
+    if 'password' in data and data['password']:
+        user.password_hash = generate_password_hash(data['password'], method='pbkdf2:sha256')
+
+    if 'date_of_birth' in data:
+        try:
+            user.date_of_birth = datetime.strptime(data['date_of_birth'], '%Y-%m-%d')
+        except ValueError:
+            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+
+    if 'admin' in data:
+        admin_input = str(data['admin']).strip().lower()
+        if admin_input not in ['true', 'false']:
+            return jsonify({'error': "Invalid value for 'admin'. Must be 'true' or 'false'."}), 400
+        user.admin = admin_input == 'true'
+
+    # Save changes to the database
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'An error occurred while updating the user'}), 500
+
+    return jsonify({'message': 'User updated successfully', 'user': format_user(user)}), 200
+
 
 @app.route('/accounts/<account_number>/', methods=['PUT'])
 @jwt_required()
