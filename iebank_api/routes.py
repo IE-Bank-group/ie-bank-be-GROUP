@@ -169,7 +169,7 @@ def admin_portal():
     return jsonify({'users': formatted_users}), 200
 
 @app.route('/admin/users', methods=['POST'])
-@jwt_required
+@jwt_required()
 def create_user():
     current_user_id = get_jwt_identity()
     current_user = User.query.get(current_user_id)
@@ -201,8 +201,8 @@ def create_user():
     return format_user(new_user)
 
 @app.route('/admin/users/<int:id>', methods=['PUT'])
-@jwt_required
-def update_user():
+@jwt_required()
+def update_user(id):
     current_user_id = get_jwt_identity()
     current_user = User.query.get(current_user_id)
     # Route for admin to update a user by ID
