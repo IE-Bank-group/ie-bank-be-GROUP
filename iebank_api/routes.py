@@ -117,7 +117,7 @@ def user_portal():
         'transactions': [format_transaction(transaction) for transaction in transactions]
     }), 200
 
-@app.route('/create_admin', methods=['POST'])
+'''@app.route('/create_admin', methods=['POST'])
 @jwt_required()
 def create_admin():
     data = request.get_json()
@@ -146,7 +146,7 @@ def create_admin():
         "username": new_admin.username,
         "email": new_admin.email,
         "admin": new_admin.admin,
-    }), 201
+    }), 201'''
 
 
 @app.route('/admin_portal', methods=['GET'])
@@ -174,7 +174,7 @@ def create_user():
     current_user_id = get_jwt_identity()
     current_user = User.query.get(current_user_id)
     # Route for admin to create a new user
-    if current_user.role != 'admin':
+    if current_user.admin != 'admin':
         abort(401)  # Unauthorized
 
     data = request.get_json()
@@ -206,7 +206,7 @@ def update_user(id):
     current_user_id = get_jwt_identity()
     current_user = User.query.get(current_user_id)
     # Route for admin to update a user by ID
-    if current_user.role != 'admin':
+    if current_user.admin != 'admin':
         abort(401)  # Unauthorized
 
     user = User.query.get(id)
